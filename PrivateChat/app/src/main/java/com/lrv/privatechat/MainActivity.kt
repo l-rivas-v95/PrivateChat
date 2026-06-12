@@ -18,19 +18,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lrv.privatechat.data.PrivateChatDatabase
+import com.lrv.privatechat.data.entity.ChatEntity
+import com.lrv.privatechat.data.entity.ContactEntity
+import com.lrv.privatechat.data.entity.MessageEntity
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
+import kotlinx.coroutines.launch
 
 private data class UiMessage(
     val from: String,
     val to: String,
     val text: String,
-    val mine: Boolean
+    val mine: Boolean,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 private data class Conversation(
@@ -51,9 +58,11 @@ private enum class AppColor(
 class MainActivity : ComponentActivity() {
 
     private lateinit var chatClient: ChatWebSocketClient
+    private lateinit var database: PrivateChatDatabase
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        database = PrivateChatDatabase.getInstance(this)
 
         setContent {
             PrivateChatTheme {
@@ -78,6 +87,9 @@ class MainActivity : ComponentActivity() {
         val contacts = remember { listOf("ana", "carlos", "pepe") }
 
         LaunchedEffect(Unit) {
+            seedContacts(contacts)
+            loadMessagesFromDatabase { loaded -> messages = loaded }
+
             chatClient = ChatWebSocketClient(
                 onMessageReceived = { received ->
                     val from = extractValue(received, "from")
@@ -85,12 +97,15 @@ class MainActivity : ComponentActivity() {
                     val text = extractValue(received, "text")
 
                     if (from.isNotBlank() && text.isNotBlank()) {
-                        messages = messages + UiMessage(
+                        val uiMessage = UiMessage(
                             from = from,
                             to = to,
                             text = text,
                             mine = false
                         )
+
+                        messages = messages + uiMessage
+                        saveMessageToDatabase(uiMessage, contactUsername = from)
                     }
                 },
                 onStatusChanged = { newStatus ->
@@ -136,12 +151,15 @@ class MainActivity : ComponentActivity() {
 
                         chatClient.send(json)
 
-                        messages = messages + UiMessage(
+                        val uiMessage = UiMessage(
                             from = username,
                             to = contact,
                             text = text,
                             mine = true
                         )
+
+                        messages = messages + uiMessage
+                        saveMessageToDatabase(uiMessage, contactUsername = contact)
                     }
                 )
             }
@@ -181,9 +199,7 @@ class MainActivity : ComponentActivity() {
                 .background(Color(0xFFF7F7F7))
         ) {
             Surface(color = appColor.main) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -233,9 +249,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(contacts) { contact ->
                     val lastMessage = messages
                         .lastOrNull {
@@ -549,6 +563,97 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun seedContacts(contacts: List<String>) {
+        lifecycleScope.launch {
+            val now = System.currentTimeMillis()
+            contacts.forEach { contact ->
+                database.contactDao().save(
+                    ContactEntity(
+                        username = contact,
+                        displayName = contact.replaceFirstChar { it.uppercase() },
+                        createdAt = now
+                    )
+                )
+                ensureChat(contact)
+            }
+        }
+    }
+
+    private fun loadMessagesFromDatabase(onLoaded: (List<UiMessage>) -> Unit) {
+        lifecycleScope.launch {
+            val chats = database.chatDao().getAllChatsOnce()
+            val loadedMessages = mutableListOf<UiMessage>()
+
+            chats.forEach { chat ->
+                val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
+                    .map { entity ->
+                        UiMessage(
+                            from = entity.senderUsername,
+                            to = entity.receiverUsername,
+                            text = entity.body,
+                            mine = entity.isMine,
+                            timestamp = entity.timestamp
+                        )
+                    }
+
+                loadedMessages.addAll(chatMessages)
+            }
+
+            onLoaded(loadedMessages.sortedBy { it.timestamp })
+        }
+    }
+
+    private fun saveMessageToDatabase(message: UiMessage, contactUsername: String) {
+        lifecycleScope.launch {
+            val chat = ensureChat(contactUsername)
+
+            database.chatMessageDao().saveChatMessage(
+                MessageEntity(
+                    chatId = chat.id,
+                    senderUsername = message.from,
+                    receiverUsername = message.to,
+                    body = message.text,
+                    timestamp = message.timestamp,
+                    isMine = message.mine,
+                    deliveryStatus = if (message.mine) "SENT" else "RECEIVED"
+                )
+            )
+
+            database.chatDao().save(
+                chat.copy(
+                    updatedAt = message.timestamp,
+                    lastMessagePreview = message.text
+                )
+            )
+        }
+    }
+
+    private suspend fun ensureChat(contactUsername: String): ChatEntity {
+        val existingChat = database.chatDao().findByContact(contactUsername)
+
+        if (existingChat != null) {
+            return existingChat
+        }
+
+        val now = System.currentTimeMillis()
+        val chatId = database.chatDao().save(
+            ChatEntity(
+                contactUsername = contactUsername,
+                createdAt = now,
+                updatedAt = now,
+                lastMessagePreview = "Sin mensajes todavía"
+            )
+        )
+
+        return ChatEntity(
+            id = chatId,
+            contactUsername = contactUsername,
+            createdAt = now,
+            updatedAt = now,
+            lastMessagePreview = "Sin mensajes todavía"
+        )
     }
 
     private fun extractValue(json: String, key: String): String {
