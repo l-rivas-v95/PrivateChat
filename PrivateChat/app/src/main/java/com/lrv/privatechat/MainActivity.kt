@@ -34,6 +34,9 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private const val UNKNOWN_CONTACT_NAME = "Usuario desconocido"
+private const val MESSAGE_STATUS_SENT = "SENT"
+private const val MESSAGE_STATUS_DELIVERED = "DELIVERED"
+private const val MESSAGE_STATUS_RECEIVED = "RECEIVED"
 
 private data class UiMessage(
     val id: String = UUID.randomUUID().toString(),
@@ -42,7 +45,7 @@ private data class UiMessage(
     val text: String,
     val mine: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val status: String = if (mine) "SENT" else "RECEIVED"
+    val status: String = if (mine) MESSAGE_STATUS_SENT else MESSAGE_STATUS_RECEIVED
 )
 
 private data class Conversation(
@@ -125,6 +128,23 @@ class MainActivity : ComponentActivity() {
 
             chatClient = ChatWebSocketClient(
                 onMessageReceived = { received ->
+                    val type = extractValue(received, "type")
+
+                    if (type == "ack") {
+                        val messageId = extractValue(received, "messageId")
+                        if (messageId.isNotBlank()) {
+                            messages = messages.map { message ->
+                                if (message.id == messageId) {
+                                    message.copy(status = MESSAGE_STATUS_DELIVERED)
+                                } else {
+                                    message
+                                }
+                            }
+                            updateMessageStatus(messageId, MESSAGE_STATUS_DELIVERED) { reloadMessages() }
+                        }
+                        return@ChatWebSocketClient
+                    }
+
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
                     val text = extractValue(received, "text")
@@ -137,11 +157,11 @@ class MainActivity : ComponentActivity() {
                             to = to,
                             text = text,
                             mine = false,
-                            status = "RECEIVED"
+                            status = MESSAGE_STATUS_RECEIVED
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = from, status = "RECEIVED")
+                        saveMessageToDatabase(uiMessage, contactUsername = from, status = MESSAGE_STATUS_RECEIVED)
                         if (contacts.none { it.username == from }) {
                             saveUnknownContact(from) { contacts = it }
                         }
@@ -227,11 +247,11 @@ class MainActivity : ComponentActivity() {
                             to = contact,
                             text = text,
                             mine = true,
-                            status = "SENT"
+                            status = MESSAGE_STATUS_SENT
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = contact, status = "SENT")
+                        saveMessageToDatabase(uiMessage, contactUsername = contact, status = MESSAGE_STATUS_SENT)
                     }
                 )
             }
@@ -710,7 +730,11 @@ class MainActivity : ComponentActivity() {
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = if (message.mine) "enviado" else message.from.take(8) + "...",
+                        text = when {
+                            !message.mine -> message.from.take(8) + "..."
+                            message.status == MESSAGE_STATUS_DELIVERED -> "entregado"
+                            else -> "enviado"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF777777),
                         modifier = Modifier.align(Alignment.End)
@@ -948,6 +972,13 @@ class MainActivity : ComponentActivity() {
                     lastMessagePreview = message.text
                 )
             )
+        }
+    }
+
+    private fun updateMessageStatus(messageId: String, status: String, onDone: () -> Unit) {
+        lifecycleScope.launch {
+            database.chatMessageDao().updateDeliveryStatusByMessageId(messageId, status)
+            onDone()
         }
     }
 
