@@ -39,8 +39,6 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        System.out.println("Payload recibido: " + payload);
-
         String to = extractValue(payload, "to");
 
         if (to == null || to.isBlank()) {
@@ -72,7 +70,6 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         }
 
         for (String payload : pending) {
-            System.out.println("Payload pendiente entregado: " + payload);
             session.sendMessage(new TextMessage(payload));
             sendOrQueueAck(payload);
         }
