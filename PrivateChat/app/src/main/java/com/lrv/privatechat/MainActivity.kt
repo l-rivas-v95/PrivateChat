@@ -1,9 +1,15 @@
 package com.lrv.privatechat
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
+import android.util.Base64
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +41,7 @@ import com.lrv.privatechat.ui.screens.ChatsScreen
 import com.lrv.privatechat.ui.screens.ProfileSettingsScreen
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -72,6 +79,7 @@ class MainActivity : ComponentActivity() {
         var localUserId by remember { mutableStateOf(initialUserId) }
         var connectedUserId by remember { mutableStateOf(localUserId) }
         var displayName by remember { mutableStateOf(preferences.getString("display_name", "Luis") ?: "Luis") }
+        var localAvatarBase64 by remember { mutableStateOf(preferences.getString("local_avatar_base64", null)) }
         var selectedColor by remember {
             mutableStateOf(
                 AppColor.valueOf(preferences.getString("color", AppColor.GREEN.name) ?: AppColor.GREEN.name)
@@ -81,6 +89,17 @@ class MainActivity : ComponentActivity() {
         var messages by remember { mutableStateOf(listOf<UiMessage>()) }
         var contacts by remember { mutableStateOf(listOf<ContactEntity>()) }
         var showNewChatDialog by remember { mutableStateOf(false) }
+
+        val avatarPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri != null) {
+                encodeAvatarToBase64(uri)?.let { encoded ->
+                    localAvatarBase64 = encoded
+                    preferences.edit().putString("local_avatar_base64", encoded).apply()
+                }
+            }
+        }
 
         fun reloadMessages() {
             loadMessagesFromDatabase { loaded -> messages = loaded }
@@ -303,10 +322,14 @@ class MainActivity : ComponentActivity() {
                     userId = localUserId,
                     displayName = displayName,
                     publicKey = localPublicKey,
+                    avatarBase64 = localAvatarBase64,
                     appColor = selectedColor,
                     onDisplayNameChange = { newName ->
                         displayName = newName
                         preferences.edit().putString("display_name", newName).apply()
+                    },
+                    onAvatarClick = {
+                        avatarPicker.launch("image/*")
                     },
                     onColorChange = { color ->
                         selectedColor = color
@@ -451,6 +474,18 @@ class MainActivity : ComponentActivity() {
             database.chatMessageDao().updateDeliveryStatusByMessageId(messageId, status)
             onDone()
         }
+    }
+
+    private fun encodeAvatarToBase64(uri: Uri): String? {
+        return runCatching {
+            val inputStream = contentResolver.openInputStream(uri) ?: return null
+            val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return null
+            val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, 256, 256, true)
+            val outputStream = ByteArrayOutputStream()
+
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
+            Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+        }.getOrNull()
     }
 
     private suspend fun ensureChat(contactUsername: String): ChatEntity {
