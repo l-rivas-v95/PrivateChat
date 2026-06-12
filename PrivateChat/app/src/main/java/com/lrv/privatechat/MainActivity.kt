@@ -101,6 +101,10 @@ class MainActivity : ComponentActivity() {
             status = "Desconectado"
         }
 
+        fun sendKeyExchange(to: String) {
+            chatClient.send(chatCryptoService.buildKeyExchangePayload(connectedUserId, to))
+        }
+
         LaunchedEffect(Unit) {
             reloadContacts()
             reloadMessages()
@@ -126,6 +130,18 @@ class MainActivity : ComponentActivity() {
 
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
+
+                    if (type == "key_exchange") {
+                        val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
+                        if (from.isNotBlank() && publicKey.isNotBlank()) {
+                            saveContact(from, UNKNOWN_CONTACT_NAME, publicKey) { loaded ->
+                                contacts = loaded
+                                sendKeyExchange(from)
+                            }
+                        }
+                        return@ChatWebSocketClient
+                    }
+
                     val text = chatCryptoService.readPlainTextFromPayload(received, from, contacts)
                     val messageId = extractValue(received, "id").ifBlank { UUID.randomUUID().toString() }
 
@@ -160,6 +176,7 @@ class MainActivity : ComponentActivity() {
                 onDismiss = { showNewChatDialog = false },
                 onSaveManual = { contactId, contactName, publicKey ->
                     saveContact(contactId, contactName, publicKey) { contacts = it }
+                    sendKeyExchange(contactId)
                     showNewChatDialog = false
                 }
             )
@@ -213,6 +230,7 @@ class MainActivity : ComponentActivity() {
                     onBack = { navController.popBackStack() },
                     onSaveContact = { newName, publicKey ->
                         saveContact(contact, newName, publicKey) { contacts = it }
+                        sendKeyExchange(contact)
                     },
                     onSend = { text ->
                         val messageId = UUID.randomUUID().toString()
@@ -223,6 +241,10 @@ class MainActivity : ComponentActivity() {
                             plainText = text,
                             contact = storedContact
                         )
+
+                        if (storedContact?.publicKey.isNullOrBlank()) {
+                            sendKeyExchange(contact)
+                        }
 
                         chatClient.send(json)
 
@@ -280,7 +302,7 @@ class MainActivity : ComponentActivity() {
                 ContactEntity(
                     id = existingContact?.id ?: 0,
                     username = contactId,
-                    displayName = contactName,
+                    displayName = if (existingContact?.displayName == UNKNOWN_CONTACT_NAME) contactName else contactName,
                     publicKey = publicKey ?: existingContact?.publicKey,
                     createdAt = existingContact?.createdAt ?: now,
                     lastSeenAt = existingContact?.lastSeenAt
