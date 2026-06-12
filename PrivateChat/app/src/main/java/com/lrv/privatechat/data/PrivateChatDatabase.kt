@@ -17,7 +17,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
         ChatEntity::class,
         MessageEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class PrivateChatDatabase : RoomDatabase() {
