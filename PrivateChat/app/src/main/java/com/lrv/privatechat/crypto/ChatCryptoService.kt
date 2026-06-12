@@ -6,6 +6,14 @@ class ChatCryptoService(
     private val keyPairManager: KeyPairManager
 ) {
 
+    fun buildKeyExchangePayload(from: String, to: String): String {
+        return "{\"type\":\"key_exchange\",\"from\":\"$from\",\"to\":\"$to\",\"publicKey\":\"${keyPairManager.getPublicKeyText()}\"}"
+    }
+
+    fun getPublicKeyFromPayload(payload: String): String {
+        return extractValue(payload, "publicKey")
+    }
+
     fun buildOutgoingPayload(
         messageId: String,
         from: String,
@@ -24,7 +32,7 @@ class ChatCryptoService(
             val remotePublicKey = keyPairManager.decodePublicKey(contactPublicKey)
             val encrypted = CryptoUtils.encrypt(plainText, localPrivateKey, remotePublicKey)
 
-            "{\"id\":\"$messageId\",\"from\":\"$from\",\"to\":\"$to\",\"cipherText\":\"${encrypted.cipherText}\",\"iv\":\"${encrypted.iv}\"}"
+            "{\"type\":\"message\",\"id\":\"$messageId\",\"from\":\"$from\",\"to\":\"$to\",\"cipherText\":\"${encrypted.cipherText}\",\"iv\":\"${encrypted.iv}\"}"
         } catch (_: Exception) {
             plainPayload(messageId, from, to, plainText)
         }
@@ -63,7 +71,7 @@ class ChatCryptoService(
         to: String,
         text: String
     ): String {
-        return "{\"id\":\"$messageId\",\"from\":\"$from\",\"to\":\"$to\",\"text\":\"${escapeJson(text)}\"}"
+        return "{\"type\":\"message\",\"id\":\"$messageId\",\"from\":\"$from\",\"to\":\"$to\",\"text\":\"${escapeJson(text)}\"}"
     }
 
     private fun extractValue(json: String, key: String): String {
