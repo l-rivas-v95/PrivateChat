@@ -105,6 +105,16 @@ class MainActivity : ComponentActivity() {
             chatClient.send(chatCryptoService.buildKeyExchangePayload(connectedUserId, to))
         }
 
+        fun addSystemMessage(contact: String, text: String) {
+            messages = messages + UiMessage(
+                from = connectedUserId,
+                to = contact,
+                text = text,
+                mine = true,
+                status = MESSAGE_STATUS_SENT
+            )
+        }
+
         LaunchedEffect(Unit) {
             reloadContacts()
             reloadMessages()
@@ -233,6 +243,12 @@ class MainActivity : ComponentActivity() {
                         sendKeyExchange(contact)
                     },
                     onSend = { text ->
+                        if (storedContact?.publicKey.isNullOrBlank()) {
+                            sendKeyExchange(contact)
+                            addSystemMessage(contact, "Intercambio de claves iniciado. Espera a que el contacto responda antes de enviar mensajes.")
+                            return@ChatDetailScreen
+                        }
+
                         val messageId = UUID.randomUUID().toString()
                         val json = chatCryptoService.buildOutgoingPayload(
                             messageId = messageId,
@@ -241,10 +257,6 @@ class MainActivity : ComponentActivity() {
                             plainText = text,
                             contact = storedContact
                         )
-
-                        if (storedContact?.publicKey.isNullOrBlank()) {
-                            sendKeyExchange(contact)
-                        }
 
                         chatClient.send(json)
 
@@ -297,12 +309,18 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             val now = System.currentTimeMillis()
             val existingContact = database.contactDao().findByUsername(contactId)
+            val nextDisplayName = when {
+                existingContact == null -> contactName
+                existingContact.displayName == UNKNOWN_CONTACT_NAME && contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
+                contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
+                else -> contactName
+            }
 
             database.contactDao().save(
                 ContactEntity(
                     id = existingContact?.id ?: 0,
                     username = contactId,
-                    displayName = if (existingContact?.displayName == UNKNOWN_CONTACT_NAME) contactName else contactName,
+                    displayName = nextDisplayName,
                     publicKey = publicKey ?: existingContact?.publicKey,
                     createdAt = existingContact?.createdAt ?: now,
                     lastSeenAt = existingContact?.lastSeenAt
