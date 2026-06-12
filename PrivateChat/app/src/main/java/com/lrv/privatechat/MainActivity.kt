@@ -31,6 +31,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private data class UiMessage(
     val from: String,
@@ -42,6 +43,7 @@ private data class UiMessage(
 
 private data class Conversation(
     val username: String,
+    val displayName: String,
     val lastMessage: String
 )
 
@@ -75,9 +77,15 @@ class MainActivity : ComponentActivity() {
     private fun PrivateChatApp() {
         val navController = rememberNavController()
         val preferences = remember { getSharedPreferences("private_chat_settings", Context.MODE_PRIVATE) }
+        val initialUserId = remember {
+            preferences.getString("local_user_id", null) ?: UUID.randomUUID().toString().also {
+                preferences.edit().putString("local_user_id", it).apply()
+            }
+        }
 
-        var username by remember { mutableStateOf(preferences.getString("username", "luis") ?: "luis") }
-        var connectedUsername by remember { mutableStateOf(preferences.getString("connected_username", "luis") ?: "luis") }
+        var localUserId by remember { mutableStateOf(initialUserId) }
+        var displayName by remember { mutableStateOf(preferences.getString("display_name", "Luis") ?: "Luis") }
+        var connectedUserId by remember { mutableStateOf(preferences.getString("connected_user_id", localUserId) ?: localUserId) }
         var selectedColor by remember {
             mutableStateOf(
                 AppColor.valueOf(preferences.getString("color", AppColor.GREEN.name) ?: AppColor.GREEN.name)
@@ -85,10 +93,11 @@ class MainActivity : ComponentActivity() {
         }
         var status by remember { mutableStateOf("Desconectado") }
         var messages by remember { mutableStateOf(listOf<UiMessage>()) }
-        val contacts = remember { listOf("ana", "carlos", "pepe", "luis") }
+        var contacts by remember { mutableStateOf(listOf<ContactEntity>()) }
+        var showNewChatDialog by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
-            seedContacts(contacts)
+            loadContactsFromDatabase { loaded -> contacts = loaded }
             loadMessagesFromDatabase { loaded -> messages = loaded }
 
             chatClient = ChatWebSocketClient(
@@ -107,6 +116,9 @@ class MainActivity : ComponentActivity() {
 
                         messages = messages + uiMessage
                         saveMessageToDatabase(uiMessage, contactUsername = from)
+                        if (contacts.none { it.username == from }) {
+                            saveContact(from, from) { contacts = it }
+                        }
                     }
                 },
                 onStatusChanged = { newStatus ->
@@ -115,7 +127,18 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        val visibleContacts = contacts.filter { it != connectedUsername }
+        if (showNewChatDialog) {
+            NewChatDialog(
+                appColor = selectedColor,
+                onDismiss = { showNewChatDialog = false },
+                onSaveManual = { contactId, contactName ->
+                    saveContact(contactId, contactName) { contacts = it }
+                    showNewChatDialog = false
+                }
+            )
+        }
+
+        val visibleContacts = contacts.filter { it.username != connectedUserId }
 
         NavHost(
             navController = navController,
@@ -123,16 +146,18 @@ class MainActivity : ComponentActivity() {
         ) {
             composable("chats") {
                 ChatsScreen(
-                    username = connectedUsername,
+                    userId = connectedUserId,
+                    displayName = displayName,
                     status = status,
                     appColor = selectedColor,
                     contacts = visibleContacts,
                     messages = messages,
                     onConnect = {
-                        connectedUsername = username
-                        preferences.edit().putString("connected_username", username).apply()
-                        chatClient.connect(username)
+                        connectedUserId = localUserId
+                        preferences.edit().putString("connected_user_id", localUserId).apply()
+                        chatClient.connect(localUserId)
                     },
+                    onNewChat = { showNewChatDialog = true },
                     onOpenChat = { contact -> navController.navigate("chat/$contact") },
                     onOpenProfile = { navController.navigate("profile") }
                 )
@@ -143,23 +168,25 @@ class MainActivity : ComponentActivity() {
                 arguments = listOf(navArgument("contact") { type = NavType.StringType })
             ) { backStackEntry ->
                 val contact = backStackEntry.arguments?.getString("contact") ?: ""
+                val contactName = contacts.firstOrNull { it.username == contact }?.displayName ?: contact
 
                 ChatDetailScreen(
-                    username = connectedUsername,
+                    username = connectedUserId,
                     contact = contact,
+                    contactName = contactName,
                     appColor = selectedColor,
                     messages = messages.filter {
-                        (it.from == connectedUsername && it.to == contact) ||
-                                (it.from == contact && it.to == connectedUsername)
+                        (it.from == connectedUserId && it.to == contact) ||
+                                (it.from == contact && it.to == connectedUserId)
                     },
                     onBack = { navController.popBackStack() },
                     onSend = { text ->
-                        val json = "{\"from\":\"$connectedUsername\",\"to\":\"$contact\",\"text\":\"$text\"}"
+                        val json = "{\"from\":\"$connectedUserId\",\"to\":\"$contact\",\"text\":\"$text\"}"
 
                         chatClient.send(json)
 
                         val uiMessage = UiMessage(
-                            from = connectedUsername,
+                            from = connectedUserId,
                             to = contact,
                             text = text,
                             mine = true
@@ -173,11 +200,12 @@ class MainActivity : ComponentActivity() {
 
             composable("profile") {
                 ProfileSettingsScreen(
-                    username = username,
+                    userId = localUserId,
+                    displayName = displayName,
                     appColor = selectedColor,
-                    onUsernameChange = { newName ->
-                        username = newName
-                        preferences.edit().putString("username", newName).apply()
+                    onDisplayNameChange = { newName ->
+                        displayName = newName
+                        preferences.edit().putString("display_name", newName).apply()
                     },
                     onColorChange = { color ->
                         selectedColor = color
@@ -191,12 +219,14 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun ChatsScreen(
-        username: String,
+        userId: String,
+        displayName: String,
         status: String,
         appColor: AppColor,
-        contacts: List<String>,
+        contacts: List<ContactEntity>,
         messages: List<UiMessage>,
         onConnect: () -> Unit,
+        onNewChat: () -> Unit,
         onOpenChat: (String) -> Unit,
         onOpenProfile: () -> Unit
     ) {
@@ -221,7 +251,7 @@ class MainActivity : ComponentActivity() {
                                 color = Color.White
                             )
                             Text(
-                                text = "$username · $status",
+                                text = "$displayName · $status",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.85f)
                             )
@@ -247,29 +277,50 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.width(12.dp))
 
-                        Text(
-                            text = if (status == "Conectado") "Listo para chatear" else "Pulsa conectar para entrar",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Button(
+                            onClick = onNewChat,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            Text("+ Nuevo chat", color = appColor.main)
+                        }
                     }
+
+                    Text(
+                        text = "Mi ID: ${userId.take(8)}...",
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
             }
 
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(contacts) { contact ->
-                    val lastMessage = messages
-                        .lastOrNull {
-                            (it.from == username && it.to == contact) ||
-                                    (it.from == contact && it.to == username)
-                        }
-                        ?.text ?: "Sin mensajes todavía"
-
-                    ConversationRow(
-                        conversation = Conversation(contact, lastMessage),
-                        appColor = appColor,
-                        onClick = { onOpenChat(contact) }
+            if (contacts.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No tienes chats. Pulsa + Nuevo chat para añadir un contacto.",
+                        color = Color(0xFF666666),
+                        modifier = Modifier.padding(24.dp)
                     )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(contacts) { contact ->
+                        val lastMessage = messages
+                            .lastOrNull {
+                                (it.from == userId && it.to == contact.username) ||
+                                        (it.from == contact.username && it.to == userId)
+                            }
+                            ?.text ?: "Sin mensajes todavía"
+
+                        ConversationRow(
+                            conversation = Conversation(contact.username, contact.displayName, lastMessage),
+                            appColor = appColor,
+                            onClick = { onOpenChat(contact.username) }
+                        )
+                    }
                 }
             }
         }
@@ -296,7 +347,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = conversation.username.first().uppercase(),
+                        text = conversation.displayName.firstOrNull()?.uppercase() ?: "?",
                         fontWeight = FontWeight.Bold,
                         color = appColor.main
                     )
@@ -307,7 +358,7 @@ class MainActivity : ComponentActivity() {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = conversation.username.replaceFirstChar { it.uppercase() },
+                    text = conversation.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF111111)
@@ -330,9 +381,82 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    private fun NewChatDialog(
+        appColor: AppColor,
+        onDismiss: () -> Unit,
+        onSaveManual: (String, String) -> Unit
+    ) {
+        var contactId by remember { mutableStateOf("") }
+        var contactName by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Nuevo chat") },
+            text = {
+                Column {
+                    Text(
+                        text = "Añade un contacto por ID manualmente. El escaneo QR se añadirá en el siguiente paso.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = contactId,
+                        onValueChange = { contactId = it.trim() },
+                        label = { Text("ID del contacto") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = contactName,
+                        onValueChange = { contactName = it },
+                        label = { Text("Nombre para guardar") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Surface(
+                        color = appColor.light,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "QR: pendiente de implementar escáner",
+                            color = appColor.main,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (contactId.isNotBlank()) {
+                            onSaveManual(contactId, contactName.ifBlank { contactId })
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    @Composable
     private fun ChatDetailScreen(
         username: String,
         contact: String,
+        contactName: String,
         appColor: AppColor,
         messages: List<UiMessage>,
         onBack: () -> Unit,
@@ -363,7 +487,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = contact.first().uppercase(),
+                                text = contactName.firstOrNull()?.uppercase() ?: "?",
                                 fontWeight = FontWeight.Bold,
                                 color = appColor.main
                             )
@@ -374,13 +498,13 @@ class MainActivity : ComponentActivity() {
 
                     Column {
                         Text(
-                            text = contact.replaceFirstChar { it.uppercase() },
+                            text = contactName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "En línea",
+                            text = contact.take(12) + "...",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
@@ -456,7 +580,7 @@ class MainActivity : ComponentActivity() {
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = if (message.mine) "enviado" else message.from,
+                        text = if (message.mine) "enviado" else message.from.take(8) + "...",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF777777),
                         modifier = Modifier.align(Alignment.End)
@@ -468,9 +592,10 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun ProfileSettingsScreen(
-        username: String,
+        userId: String,
+        displayName: String,
         appColor: AppColor,
-        onUsernameChange: (String) -> Unit,
+        onDisplayNameChange: (String) -> Unit,
         onColorChange: (AppColor) -> Unit,
         onBack: () -> Unit
     ) {
@@ -507,7 +632,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Nombre",
+                            text = "Mi identidad",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -515,11 +640,50 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = username,
-                            onValueChange = onUsernameChange,
-                            label = { Text("Tu nombre") },
+                            value = displayName,
+                            onValueChange = onDisplayNameChange,
+                            label = { Text("Nombre visible") },
                             modifier = Modifier.fillMaxWidth()
                         )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = "Mi ID fijo",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        Text(
+                            text = userId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF555555)
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Surface(
+                            color = appColor.light,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "QR",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = appColor.main
+                                    )
+                                    Text(
+                                        text = "Pendiente de generar",
+                                        color = appColor.main
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -572,19 +736,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun seedContacts(contacts: List<String>) {
+    private fun loadContactsFromDatabase(onLoaded: (List<ContactEntity>) -> Unit) {
+        lifecycleScope.launch {
+            onLoaded(database.contactDao().getContactsOnce())
+        }
+    }
+
+    private fun saveContact(contactId: String, contactName: String, onLoaded: (List<ContactEntity>) -> Unit) {
         lifecycleScope.launch {
             val now = System.currentTimeMillis()
-            contacts.forEach { contact ->
-                database.contactDao().save(
-                    ContactEntity(
-                        username = contact,
-                        displayName = contact.replaceFirstChar { it.uppercase() },
-                        createdAt = now
-                    )
+            database.contactDao().save(
+                ContactEntity(
+                    username = contactId,
+                    displayName = contactName,
+                    createdAt = now
                 )
-                ensureChat(contact)
-            }
+            )
+            ensureChat(contactId)
+            onLoaded(database.contactDao().getContactsOnce())
         }
     }
 
