@@ -86,8 +86,8 @@ class MainActivity : ComponentActivity() {
         }
 
         var localUserId by remember { mutableStateOf(initialUserId) }
+        var connectedUserId by remember { mutableStateOf(localUserId) }
         var displayName by remember { mutableStateOf(preferences.getString("display_name", "Luis") ?: "Luis") }
-        var connectedUserId by remember { mutableStateOf(preferences.getString("connected_user_id", localUserId) ?: localUserId) }
         var selectedColor by remember {
             mutableStateOf(
                 AppColor.valueOf(preferences.getString("color", AppColor.GREEN.name) ?: AppColor.GREEN.name)
@@ -100,6 +100,17 @@ class MainActivity : ComponentActivity() {
 
         fun reloadMessages() {
             loadMessagesFromDatabase { loaded -> messages = loaded }
+        }
+
+        fun connect() {
+            connectedUserId = localUserId
+            preferences.edit().putString("connected_user_id", localUserId).apply()
+            chatClient.connect(localUserId)
+        }
+
+        fun disconnect() {
+            chatClient.disconnect()
+            status = "Desconectado"
         }
 
         LaunchedEffect(Unit) {
@@ -140,6 +151,8 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             )
+
+            connect()
         }
 
         if (showNewChatDialog) {
@@ -154,6 +167,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val visibleContacts = contacts.filter { it.username != connectedUserId }
+        val isConnected = status == "Conectado"
 
         NavHost(
             navController = navController,
@@ -164,13 +178,12 @@ class MainActivity : ComponentActivity() {
                     userId = connectedUserId,
                     displayName = displayName,
                     status = status,
+                    isConnected = isConnected,
                     appColor = selectedColor,
                     contacts = visibleContacts,
                     messages = messages,
-                    onConnect = {
-                        connectedUserId = localUserId
-                        preferences.edit().putString("connected_user_id", localUserId).apply()
-                        chatClient.connect(localUserId)
+                    onToggleConnection = {
+                        if (isConnected) disconnect() else connect()
                     },
                     onNewChat = { showNewChatDialog = true },
                     onOpenChat = { contact -> navController.navigate("chat/$contact") },
@@ -238,10 +251,11 @@ class MainActivity : ComponentActivity() {
         userId: String,
         displayName: String,
         status: String,
+        isConnected: Boolean,
         appColor: AppColor,
         contacts: List<ContactEntity>,
         messages: List<UiMessage>,
-        onConnect: () -> Unit,
+        onToggleConnection: () -> Unit,
         onNewChat: () -> Unit,
         onOpenChat: (String) -> Unit,
         onOpenProfile: () -> Unit
@@ -285,10 +299,13 @@ class MainActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Button(
-                            onClick = onConnect,
+                            onClick = onToggleConnection,
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White)
                         ) {
-                            Text("Conectar", color = appColor.main)
+                            Text(
+                                text = if (isConnected) "Desconectar" else "Conectar",
+                                color = appColor.main
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(12.dp))
