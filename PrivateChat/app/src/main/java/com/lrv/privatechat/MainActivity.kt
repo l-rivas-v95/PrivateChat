@@ -213,6 +213,15 @@ class MainActivity : ComponentActivity() {
                     },
                     onNewChat = { showNewChatDialog = true },
                     onOpenChat = { contact -> navController.navigate("chat/$contact") },
+                    onDeleteConversation = { contact ->
+                        deleteConversation(contact) {
+                            contacts = contacts.filterNot { it.username == contact }
+                            messages = messages.filterNot {
+                                (it.from == connectedUserId && it.to == contact) ||
+                                        (it.from == contact && it.to == connectedUserId)
+                            }
+                        }
+                    },
                     onOpenProfile = { navController.navigate("profile") }
                 )
             }
@@ -417,6 +426,19 @@ class MainActivity : ComponentActivity() {
     private fun deleteMessage(messageId: String, onDone: () -> Unit) {
         lifecycleScope.launch {
             database.chatMessageDao().deleteMessageByMessageId(messageId)
+            onDone()
+        }
+    }
+
+    private fun deleteConversation(contactUsername: String, onDone: () -> Unit) {
+        lifecycleScope.launch {
+            val chat = database.chatDao().findByContact(contactUsername)
+
+            if (chat != null) {
+                database.chatMessageDao().deleteMessagesByChatId(chat.id)
+                database.chatDao().deleteChatByContact(contactUsername)
+            }
+
             onDone()
         }
     }
