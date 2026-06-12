@@ -197,8 +197,9 @@ class MainActivity : ComponentActivity() {
             ) { backStackEntry ->
                 val contact = backStackEntry.arguments?.getString("contact") ?: ""
                 val storedContact = contacts.firstOrNull { it.username == contact }
-                val contactName = storedContact?.displayName ?: UNKNOWN_CONTACT_NAME
-                val isUnknownContact = contactName == UNKNOWN_CONTACT_NAME
+                val rawContactName = storedContact?.displayName ?: UNKNOWN_CONTACT_NAME
+                val isUnknownContact = rawContactName == UNKNOWN_CONTACT_NAME || rawContactName == contact
+                val contactName = if (isUnknownContact) UNKNOWN_CONTACT_NAME else rawContactName
 
                 ChatDetailScreen(
                     username = connectedUserId,
@@ -356,8 +357,14 @@ class MainActivity : ComponentActivity() {
                             }
                             ?.text ?: "Sin mensajes todavía"
 
+                        val displayName = if (contact.displayName == contact.username) {
+                            UNKNOWN_CONTACT_NAME
+                        } else {
+                            contact.displayName
+                        }
+
                         ConversationRow(
-                            conversation = Conversation(contact.username, contact.displayName, lastMessage),
+                            conversation = Conversation(contact.username, displayName, lastMessage),
                             appColor = appColor,
                             onClick = { onOpenChat(contact.username) }
                         )
