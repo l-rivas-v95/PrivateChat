@@ -33,6 +33,8 @@ import com.lrv.privatechat.ui.theme.PrivateChatTheme
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+private const val UNKNOWN_CONTACT_NAME = "Usuario desconocido"
+
 private data class UiMessage(
     val id: String = UUID.randomUUID().toString(),
     val from: String,
@@ -102,6 +104,10 @@ class MainActivity : ComponentActivity() {
             loadMessagesFromDatabase { loaded -> messages = loaded }
         }
 
+        fun reloadContacts() {
+            loadContactsFromDatabase { loaded -> contacts = loaded }
+        }
+
         fun connect() {
             connectedUserId = localUserId
             preferences.edit().putString("connected_user_id", localUserId).apply()
@@ -114,7 +120,7 @@ class MainActivity : ComponentActivity() {
         }
 
         LaunchedEffect(Unit) {
-            loadContactsFromDatabase { loaded -> contacts = loaded }
+            reloadContacts()
             reloadMessages()
 
             chatClient = ChatWebSocketClient(
@@ -137,7 +143,7 @@ class MainActivity : ComponentActivity() {
                         messages = messages + uiMessage
                         saveMessageToDatabase(uiMessage, contactUsername = from, status = "RECEIVED")
                         if (contacts.none { it.username == from }) {
-                            saveContact(from, from) { contacts = it }
+                            saveUnknownContact(from) { contacts = it }
                         }
                     }
                 },
@@ -190,18 +196,24 @@ class MainActivity : ComponentActivity() {
                 arguments = listOf(navArgument("contact") { type = NavType.StringType })
             ) { backStackEntry ->
                 val contact = backStackEntry.arguments?.getString("contact") ?: ""
-                val contactName = contacts.firstOrNull { it.username == contact }?.displayName ?: contact
+                val storedContact = contacts.firstOrNull { it.username == contact }
+                val contactName = storedContact?.displayName ?: UNKNOWN_CONTACT_NAME
+                val isUnknownContact = contactName == UNKNOWN_CONTACT_NAME
 
                 ChatDetailScreen(
                     username = connectedUserId,
                     contact = contact,
                     contactName = contactName,
+                    isUnknownContact = isUnknownContact,
                     appColor = selectedColor,
                     messages = messages.filter {
                         (it.from == connectedUserId && it.to == contact) ||
                                 (it.from == contact && it.to == connectedUserId)
                     },
                     onBack = { navController.popBackStack() },
+                    onSaveContact = { newName ->
+                        saveContact(contact, newName) { contacts = it }
+                    },
                     onSend = { text ->
                         val messageId = UUID.randomUUID().toString()
                         val json = "{\"id\":\"$messageId\",\"from\":\"$connectedUserId\",\"to\":\"$contact\",\"text\":\"$text\"}"
@@ -394,7 +406,7 @@ class MainActivity : ComponentActivity() {
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = conversation.lastMessage,
+                    text = conversation.username.take(8) + "... · " + conversation.lastMessage,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF666666),
                     maxLines = 1
@@ -482,16 +494,75 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    private fun SaveContactDialog(
+        appColor: AppColor,
+        contactId: String,
+        onDismiss: () -> Unit,
+        onSave: (String) -> Unit
+    ) {
+        var contactName by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Guardar contacto") },
+            text = {
+                Column {
+                    Text("ID: ${contactId.take(12)}...")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = contactName,
+                        onValueChange = { contactName = it },
+                        label = { Text("Nombre") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (contactName.isNotBlank()) {
+                            onSave(contactName.trim())
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    @Composable
     private fun ChatDetailScreen(
         username: String,
         contact: String,
         contactName: String,
+        isUnknownContact: Boolean,
         appColor: AppColor,
         messages: List<UiMessage>,
         onBack: () -> Unit,
+        onSaveContact: (String) -> Unit,
         onSend: (String) -> Unit
     ) {
         var message by remember { mutableStateOf("") }
+        var showSaveContactDialog by remember { mutableStateOf(false) }
+
+        if (showSaveContactDialog) {
+            SaveContactDialog(
+                appColor = appColor,
+                contactId = contact,
+                onDismiss = { showSaveContactDialog = false },
+                onSave = { newName ->
+                    onSaveContact(newName)
+                    showSaveContactDialog = false
+                }
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -499,44 +570,67 @@ class MainActivity : ComponentActivity() {
                 .background(Color(0xFFECE5DD))
         ) {
             Surface(color = appColor.main) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = onBack) {
-                        Text("←", color = Color.White)
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = appColor.light,
-                        modifier = Modifier.size(42.dp)
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        TextButton(onClick = onBack) {
+                            Text("←", color = Color.White)
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = appColor.light,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = contactName.firstOrNull()?.uppercase() ?: "?",
+                                    fontWeight = FontWeight.Bold,
+                                    color = appColor.main
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = contactName.firstOrNull()?.uppercase() ?: "?",
+                                text = contactName,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = appColor.main
+                                color = Color.White
+                            )
+                            Text(
+                                text = contact.take(12) + "...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column {
-                        Text(
-                            text = contactName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = contact.take(12) + "...",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
+                    if (isUnknownContact) {
+                        Surface(
+                            color = Color.White.copy(alpha = 0.12f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Este usuario no está guardado",
+                                    color = Color.White,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { showSaveContactDialog = true }) {
+                                    Text("Guardar contacto", color = Color.White)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -771,14 +865,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun saveUnknownContact(contactId: String, onLoaded: (List<ContactEntity>) -> Unit) {
+        saveContact(contactId, UNKNOWN_CONTACT_NAME, onLoaded)
+    }
+
     private fun saveContact(contactId: String, contactName: String, onLoaded: (List<ContactEntity>) -> Unit) {
         lifecycleScope.launch {
             val now = System.currentTimeMillis()
+            val existingContact = database.contactDao().findByUsername(contactId)
+
             database.contactDao().save(
                 ContactEntity(
+                    id = existingContact?.id ?: 0,
                     username = contactId,
                     displayName = contactName,
-                    createdAt = now
+                    createdAt = existingContact?.createdAt ?: now,
+                    lastSeenAt = existingContact?.lastSeenAt
                 )
             )
             ensureChat(contactId)
