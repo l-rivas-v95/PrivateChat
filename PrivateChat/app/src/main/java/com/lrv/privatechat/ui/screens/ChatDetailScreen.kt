@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +55,7 @@ fun ChatDetailScreen(
 ) {
     var message by remember { mutableStateOf("") }
     var showSaveContactDialog by remember { mutableStateOf(false) }
+    var showClearChatDialog by remember { mutableStateOf(false) }
 
     if (showSaveContactDialog) {
         SaveContactDialog(
@@ -63,6 +65,29 @@ fun ChatDetailScreen(
             onSave = { newName, publicKey ->
                 onSaveContact(newName, publicKey)
                 showSaveContactDialog = false
+            }
+        )
+    }
+
+    if (showClearChatDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearChatDialog = false },
+            title = { Text("Vaciar chat") },
+            text = { Text("Se borrarán todos los mensajes de esta conversación solo en este dispositivo.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearChat()
+                        showClearChatDialog = false
+                    }
+                ) {
+                    Text("Vaciar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearChatDialog = false }) {
+                    Text("Cancelar")
+                }
             }
         )
     }
@@ -114,7 +139,7 @@ fun ChatDetailScreen(
                         )
                     }
 
-                    TextButton(onClick = onClearChat) {
+                    TextButton(onClick = { showClearChatDialog = true }) {
                         Text("Vaciar", color = Color.White)
                     }
                 }
