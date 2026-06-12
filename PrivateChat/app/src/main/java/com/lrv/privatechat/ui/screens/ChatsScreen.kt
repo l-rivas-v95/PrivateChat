@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,6 +36,7 @@ import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.model.ChatItemUiModel
 import com.lrv.privatechat.model.UNKNOWN_CONTACT_NAME
 import com.lrv.privatechat.model.UiMessage
+import com.lrv.privatechat.ui.components.AvatarView
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -178,7 +178,8 @@ fun ChatsScreen(
                         username = contact.username,
                         displayName = visibleName,
                         lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
-                        timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: ""
+                        timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: "",
+                        avatarBase64 = contact.avatarBase64
                     )
 
                     ChatListRow(
@@ -212,19 +213,12 @@ private fun ChatListRow(
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = CircleShape,
-            color = appColor.light,
-            modifier = Modifier.size(52.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = chatItem.displayName.firstOrNull()?.uppercase() ?: "?",
-                    fontWeight = FontWeight.Bold,
-                    color = appColor.main
-                )
-            }
-        }
+        AvatarView(
+            displayName = chatItem.displayName,
+            avatarBase64 = chatItem.avatarBase64,
+            appColor = appColor,
+            size = 52.dp
+        )
 
         Spacer(modifier = Modifier.width(14.dp))
 
