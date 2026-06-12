@@ -122,13 +122,7 @@ class MainActivity : ComponentActivity() {
         }
 
         fun sendAvatarToContact(contactUsername: String, avatarBase64: String) {
-            chatClient.send(
-                buildProfileAvatarPayload(
-                    from = connectedUserId,
-                    to = contactUsername,
-                    avatarBase64 = avatarBase64
-                )
-            )
+            chatClient.send(buildProfileAvatarPayload(connectedUserId, contactUsername, avatarBase64))
         }
 
         fun sendAvatarToContacts(avatarBase64: String) {
@@ -160,6 +154,13 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        fun refreshLocalState() {
+            lifecycleScope.launch {
+                updateContacts(database.contactDao().getContactsOnce())
+                messages = loadMessagesFromDatabaseInternal()
+            }
+        }
+
         val avatarPicker = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.GetContent()
         ) { uri ->
@@ -167,9 +168,7 @@ class MainActivity : ComponentActivity() {
                 encodeAvatarToBase64(uri)?.let { encoded ->
                     localAvatarBase64 = encoded
                     preferences.edit().putString("local_avatar_base64", encoded).apply()
-                    if (status == "Conectado") {
-                        sendAvatarToContacts(encoded)
-                    }
+                    if (status == "Conectado") sendAvatarToContacts(encoded)
                 }
             }
         }
@@ -198,8 +197,9 @@ class MainActivity : ComponentActivity() {
                         "key_exchange" -> {
                             val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
                             if (from.isNotBlank() && publicKey.isNotBlank()) {
-                                saveContact(from, UNKNOWN_CONTACT_NAME, publicKey) { loaded ->
-                                    updateContacts(loaded)
+                                lifecycleScope.launch {
+                                    saveContactInternal(from, UNKNOWN_CONTACT_NAME, publicKey)
+                                    updateContacts(database.contactDao().getContactsOnce())
                                     sendKeyExchange(from)
                                     localAvatarBase64?.let { sendAvatarToContact(from, it) }
                                 }
@@ -211,7 +211,10 @@ class MainActivity : ComponentActivity() {
                             val avatarBase64 = extractValue(received, "avatarBase64")
                             val updatedAt = extractValue(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
                             if (from.isNotBlank() && avatarBase64.isNotBlank()) {
-                                saveContactAvatar(from, avatarBase64, updatedAt) { loaded -> updateContacts(loaded) }
+                                lifecycleScope.launch {
+                                    saveContactAvatarInternal(from, avatarBase64, updatedAt)
+                                    updateContacts(database.contactDao().getContactsOnce())
+                                }
                             }
                             return@ChatWebSocketClient
                         }
@@ -232,8 +235,13 @@ class MainActivity : ComponentActivity() {
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = from, status = MESSAGE_STATUS_RECEIVED)
-                        saveUnknownContact(from) { loaded -> updateContacts(loaded) }
+
+                        lifecycleScope.launch {
+                            saveContactInternal(from, UNKNOWN_CONTACT_NAME, null)
+                            saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
+                            updateContacts(database.contactDao().getContactsOnce())
+                            messages = loadMessagesFromDatabaseInternal()
+                        }
                     }
                 },
                 onStatusChanged = { newStatus -> status = newStatus }
@@ -260,10 +268,7 @@ class MainActivity : ComponentActivity() {
             .distinctBy { it.username }
         val isConnected = status == "Conectado"
 
-        NavHost(
-            navController = navController,
-            startDestination = "chats"
-        ) {
+        NavHost(navController = navController, startDestination = "chats") {
             composable("chats") {
                 ChatsScreen(
                     userId = connectedUserId,
@@ -273,9 +278,7 @@ class MainActivity : ComponentActivity() {
                     appColor = selectedColor,
                     contacts = visibleContacts,
                     messages = messages,
-                    onToggleConnection = {
-                        if (isConnected) disconnect() else connect()
-                    },
+                    onToggleConnection = { if (isConnected) disconnect() else connect() },
                     onNewChat = { showNewChatDialog = true },
                     onOpenChat = { contact -> navController.navigate("chat/$contact") },
                     onDeleteConversation = { contact ->
@@ -327,14 +330,13 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onDeleteMessage = { message ->
-                        deleteMessage(message.id) {
-                            messages = messages.filterNot { it.id == message.id }
-                        }
+                        deleteMessage(message.id) { messages = messages.filterNot { it.id == message.id } }
                     },
                     onSend = { text ->
                         if (storedContact?.publicKey.isNullOrBlank()) {
                             sendKeyExchange(contact)
                             addSystemMessage(contact, "Intercambio de claves iniciado. Espera a que el contacto responda antes de enviar mensajes.")
+                            refreshLocalState()
                             return@ChatDetailScreen
                         }
 
@@ -359,7 +361,12 @@ class MainActivity : ComponentActivity() {
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = contact, status = MESSAGE_STATUS_SENT)
+                        lifecycleScope.launch {
+                            saveContactInternal(contact, storedContact.displayName, storedContact.publicKey)
+                            saveMessageToDatabaseInternal(uiMessage, contact, MESSAGE_STATUS_SENT)
+                            updateContacts(database.contactDao().getContactsOnce())
+                            messages = loadMessagesFromDatabaseInternal()
+                        }
                     }
                 )
             }
@@ -387,9 +394,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadContactsFromDatabase(onLoaded: (List<ContactEntity>) -> Unit) {
-        lifecycleScope.launch {
-            onLoaded(database.contactDao().getContactsOnce())
-        }
+        lifecycleScope.launch { onLoaded(database.contactDao().getContactsOnce()) }
     }
 
     private fun saveUnknownContact(contactId: String, onLoaded: (List<ContactEntity>) -> Unit) {
@@ -398,30 +403,35 @@ class MainActivity : ComponentActivity() {
 
     private fun saveContact(contactId: String, contactName: String, publicKey: String?, onLoaded: (List<ContactEntity>) -> Unit) {
         lifecycleScope.launch {
-            val now = System.currentTimeMillis()
-            val existingContact = database.contactDao().findByUsername(contactId)
-            val nextDisplayName = when {
-                existingContact == null -> contactName
-                existingContact.displayName == UNKNOWN_CONTACT_NAME && contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
-                contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
-                else -> contactName
-            }
-
-            database.contactDao().save(
-                ContactEntity(
-                    id = existingContact?.id ?: 0,
-                    username = contactId,
-                    displayName = nextDisplayName,
-                    publicKey = publicKey ?: existingContact?.publicKey,
-                    avatarBase64 = existingContact?.avatarBase64,
-                    avatarUpdatedAt = existingContact?.avatarUpdatedAt,
-                    createdAt = existingContact?.createdAt ?: now,
-                    lastSeenAt = now
-                )
-            )
-            ensureChat(contactId)
+            saveContactInternal(contactId, contactName, publicKey)
             onLoaded(database.contactDao().getContactsOnce())
         }
+    }
+
+    private suspend fun saveContactInternal(contactId: String, contactName: String, publicKey: String?): ContactEntity {
+        val now = System.currentTimeMillis()
+        val existingContact = database.contactDao().findByUsername(contactId)
+        val nextDisplayName = when {
+            existingContact == null -> contactName
+            existingContact.displayName == UNKNOWN_CONTACT_NAME && contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
+            contactName == UNKNOWN_CONTACT_NAME -> existingContact.displayName
+            else -> contactName
+        }
+
+        val contact = ContactEntity(
+            id = existingContact?.id ?: 0,
+            username = contactId,
+            displayName = nextDisplayName,
+            publicKey = publicKey ?: existingContact?.publicKey,
+            avatarBase64 = existingContact?.avatarBase64,
+            avatarUpdatedAt = existingContact?.avatarUpdatedAt,
+            createdAt = existingContact?.createdAt ?: now,
+            lastSeenAt = now
+        )
+
+        database.contactDao().save(contact)
+        ensureChat(contactId)
+        return database.contactDao().findByUsername(contactId) ?: contact
     }
 
     private fun saveContactAvatar(
@@ -431,76 +441,82 @@ class MainActivity : ComponentActivity() {
         onLoaded: (List<ContactEntity>) -> Unit
     ) {
         lifecycleScope.launch {
-            val now = System.currentTimeMillis()
-            val existingContact = database.contactDao().findByUsername(contactId)
-
-            database.contactDao().save(
-                ContactEntity(
-                    id = existingContact?.id ?: 0,
-                    username = contactId,
-                    displayName = existingContact?.displayName ?: UNKNOWN_CONTACT_NAME,
-                    publicKey = existingContact?.publicKey,
-                    avatarBase64 = avatarBase64,
-                    avatarUpdatedAt = updatedAt,
-                    createdAt = existingContact?.createdAt ?: now,
-                    lastSeenAt = now
-                )
-            )
-            ensureChat(contactId)
+            saveContactAvatarInternal(contactId, avatarBase64, updatedAt)
             onLoaded(database.contactDao().getContactsOnce())
         }
     }
 
+    private suspend fun saveContactAvatarInternal(contactId: String, avatarBase64: String, updatedAt: Long): ContactEntity {
+        val now = System.currentTimeMillis()
+        val existingContact = database.contactDao().findByUsername(contactId)
+        val contact = ContactEntity(
+            id = existingContact?.id ?: 0,
+            username = contactId,
+            displayName = existingContact?.displayName ?: UNKNOWN_CONTACT_NAME,
+            publicKey = existingContact?.publicKey,
+            avatarBase64 = avatarBase64,
+            avatarUpdatedAt = updatedAt,
+            createdAt = existingContact?.createdAt ?: now,
+            lastSeenAt = now
+        )
+
+        database.contactDao().save(contact)
+        ensureChat(contactId)
+        return database.contactDao().findByUsername(contactId) ?: contact
+    }
+
     private fun loadMessagesFromDatabase(onLoaded: (List<UiMessage>) -> Unit) {
-        lifecycleScope.launch {
-            val chats = database.chatDao().getAllChatsOnce()
-            val loadedMessages = mutableListOf<UiMessage>()
+        lifecycleScope.launch { onLoaded(loadMessagesFromDatabaseInternal()) }
+    }
 
-            chats.forEach { chat ->
-                val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
-                    .map { entity ->
-                        UiMessage(
-                            id = entity.messageId,
-                            from = entity.senderUsername,
-                            to = entity.receiverUsername,
-                            text = entity.body,
-                            mine = entity.isMine,
-                            timestamp = entity.timestamp,
-                            status = entity.deliveryStatus
-                        )
-                    }
+    private suspend fun loadMessagesFromDatabaseInternal(): List<UiMessage> {
+        val chats = database.chatDao().getAllChatsOnce()
+        val loadedMessages = mutableListOf<UiMessage>()
 
-                loadedMessages.addAll(chatMessages)
-            }
-
-            onLoaded(loadedMessages.sortedBy { it.timestamp })
+        chats.forEach { chat ->
+            val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
+                .map { entity ->
+                    UiMessage(
+                        id = entity.messageId,
+                        from = entity.senderUsername,
+                        to = entity.receiverUsername,
+                        text = entity.body,
+                        mine = entity.isMine,
+                        timestamp = entity.timestamp,
+                        status = entity.deliveryStatus
+                    )
+                }
+            loadedMessages.addAll(chatMessages)
         }
+
+        return loadedMessages.sortedBy { it.timestamp }
     }
 
     private fun saveMessageToDatabase(message: UiMessage, contactUsername: String, status: String) {
-        lifecycleScope.launch {
-            val chat = ensureChat(contactUsername)
+        lifecycleScope.launch { saveMessageToDatabaseInternal(message, contactUsername, status) }
+    }
 
-            database.chatMessageDao().saveChatMessage(
-                MessageEntity(
-                    messageId = message.id,
-                    chatId = chat.id,
-                    senderUsername = message.from,
-                    receiverUsername = message.to,
-                    body = message.text,
-                    timestamp = message.timestamp,
-                    isMine = message.mine,
-                    deliveryStatus = status
-                )
+    private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String) {
+        val chat = ensureChat(contactUsername)
+        database.chatMessageDao().saveChatMessage(
+            MessageEntity(
+                messageId = message.id,
+                chatId = chat.id,
+                senderUsername = message.from,
+                receiverUsername = message.to,
+                body = message.text,
+                timestamp = message.timestamp,
+                isMine = message.mine,
+                deliveryStatus = status
             )
+        )
 
-            database.chatDao().save(
-                chat.copy(
-                    updatedAt = message.timestamp,
-                    lastMessagePreview = message.text
-                )
+        database.chatDao().save(
+            chat.copy(
+                updatedAt = message.timestamp,
+                lastMessagePreview = message.text
             )
-        }
+        )
     }
 
     private fun clearChatMessages(contactUsername: String, onDone: () -> Unit) {
@@ -527,12 +543,10 @@ class MainActivity : ComponentActivity() {
     private fun deleteConversation(contactUsername: String, onDone: () -> Unit) {
         lifecycleScope.launch {
             val chat = database.chatDao().findByContact(contactUsername)
-
             if (chat != null) {
                 database.chatMessageDao().deleteMessagesByChatId(chat.id)
                 database.chatDao().deleteChatByContact(contactUsername)
             }
-
             onDone()
         }
     }
@@ -550,7 +564,6 @@ class MainActivity : ComponentActivity() {
             val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return null
             val scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, 256, 256, true)
             val outputStream = ByteArrayOutputStream()
-
             scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
             Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
         }.getOrNull()
@@ -564,10 +577,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun ensureChat(contactUsername: String): ChatEntity {
         val existingChat = database.chatDao().findByContact(contactUsername)
-
-        if (existingChat != null) {
-            return existingChat
-        }
+        if (existingChat != null) return existingChat
 
         val now = System.currentTimeMillis()
         val chatId = database.chatDao().save(
@@ -591,12 +601,10 @@ class MainActivity : ComponentActivity() {
     private fun extractValue(json: String, key: String): String {
         val search = "\"$key\":\""
         val start = json.indexOf(search)
-
         if (start == -1) return ""
 
         val valueStart = start + search.length
         val end = json.indexOf("\"", valueStart)
-
         if (end == -1) return ""
 
         return json.substring(valueStart, end)
@@ -604,7 +612,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-
         try {
             chatClient.disconnect()
         } catch (_: Exception) {
