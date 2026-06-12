@@ -1,87 +1,146 @@
 package com.privatechatserver.websocket;
 
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
-import java.net.URI;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 @Component
 public class ChatSocketHandler extends TextWebSocketHandler {
 
     private final Map<String, WebSocketSession> users = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> pendingMessages = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> pendingAcks = new ConcurrentHashMap<>();
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
-
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String user = getUserFromQuery(session.getUri());
 
-        if (user != null) {
-            users.put(user, session);
-            System.out.println("Usuario conectado: " + user);
+        if (user == null || user.isBlank()) {
+            session.close();
+            return;
         }
+
+        user = user.trim();
+        users.put(user, session);
+        System.out.println("Usuario conectado: " + user);
+
+        deliverPendingMessages(user, session);
+        deliverPendingAcks(user, session);
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session,
-                                     TextMessage message) throws Exception {
-
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-
         String to = extractValue(payload, "to");
 
-        WebSocketSession destination = users.get(to);
-
-        if (destination != null && destination.isOpen()) {
-
-            destination.sendMessage(
-                    new TextMessage(payload)
-            );
-
-        } else {
-
-            session.sendMessage(
-                    new TextMessage("Usuario offline: " + to)
-            );
+        if (to == null || to.isBlank()) {
+            session.sendMessage(new TextMessage("Error: destinatario no encontrado"));
+            return;
         }
+
+        to = to.trim();
+        WebSocketSession receiverSession = users.get(to);
+
+        if (receiverSession != null && receiverSession.isOpen()) {
+            receiverSession.sendMessage(new TextMessage(payload));
+            sendOrQueueAck(payload);
+            return;
+        }
+
+        pendingMessages
+                .computeIfAbsent(to, key -> new ArrayList<>())
+                .add(payload);
+
+        System.out.println("Mensaje pendiente guardado para: " + to);
+    }
+
+    private void deliverPendingMessages(String user, WebSocketSession session) throws Exception {
+        List<String> pending = pendingMessages.remove(user.trim());
+
+        if (pending == null) {
+            return;
+        }
+
+        for (String payload : pending) {
+            session.sendMessage(new TextMessage(payload));
+            sendOrQueueAck(payload);
+        }
+
+        System.out.println("Mensajes pendientes entregados a " + user + ": " + pending.size());
+    }
+
+    private void deliverPendingAcks(String user, WebSocketSession session) throws Exception {
+        List<String> acks = pendingAcks.remove(user.trim());
+
+        if (acks == null) {
+            return;
+        }
+
+        for (String ack : acks) {
+            session.sendMessage(new TextMessage(ack));
+        }
+
+        System.out.println("ACK pendientes entregados a " + user + ": " + acks.size());
+    }
+
+    private void sendOrQueueAck(String payload) throws Exception {
+        String from = extractValue(payload, "from");
+        String messageId = extractValue(payload, "id");
+
+        if (from == null || from.isBlank() || messageId == null || messageId.isBlank()) {
+            return;
+        }
+
+        from = from.trim();
+        String ack = "{\"type\":\"ack\",\"messageId\":\"" + messageId + "\",\"status\":\"DELIVERED\"}";
+        WebSocketSession senderSession = users.get(from);
+
+        if (senderSession != null && senderSession.isOpen()) {
+            senderSession.sendMessage(new TextMessage(ack));
+            return;
+        }
+
+        pendingAcks
+                .computeIfAbsent(from, key -> new ArrayList<>())
+                .add(ack);
+
+        System.out.println("ACK pendiente guardado para: " + from);
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session,
-                                      CloseStatus status) {
-
-        users.values().remove(session);
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        users.entrySet().removeIf(entry -> entry.getValue().getId().equals(session.getId()));
+        System.out.println("Usuario desconectado");
     }
 
     private String getUserFromQuery(URI uri) {
-
         if (uri == null || uri.getQuery() == null) {
             return null;
         }
 
-        for (String param : uri.getQuery().split("&")) {
+        String query = uri.getQuery();
 
+        for (String param : query.split("&")) {
             String[] parts = param.split("=");
 
-            if (parts.length == 2 &&
-                    parts[0].equals("user")) {
-
-                return parts[1];
+            if (parts.length == 2 && parts[0].equals("user")) {
+                return parts[1].trim();
             }
         }
 
         return null;
     }
 
-    private String extractValue(String json,
-                                String key) {
-
+    private String extractValue(String json, String key) {
         String search = "\"" + key + "\":\"";
-
         int start = json.indexOf(search);
 
         if (start == -1) {
@@ -89,13 +148,12 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         }
 
         start += search.length();
-
         int end = json.indexOf("\"", start);
 
         if (end == -1) {
             return null;
         }
 
-        return json.substring(start, end);
+        return json.substring(start, end).trim();
     }
 }
