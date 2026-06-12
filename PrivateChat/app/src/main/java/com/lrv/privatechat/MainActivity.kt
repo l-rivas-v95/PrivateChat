@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
         var localUserId by remember { mutableStateOf(initialUserId) }
         var connectedUserId by remember { mutableStateOf(localUserId) }
-        var displayName by remember { mutableStateOf(preferences.getString("display_name", "Luis") ?: "Luis") }
+        var displayName by remember { mutableStateOf(preferences.getString("display_name", "User") ?: "Luis") }
         var localAvatarBase64 by remember { mutableStateOf(preferences.getString("local_avatar_base64", null)) }
         var selectedColor by remember {
             mutableStateOf(
@@ -166,6 +166,18 @@ class MainActivity : ComponentActivity() {
                             saveContact(from, UNKNOWN_CONTACT_NAME, publicKey) { loaded ->
                                 contacts = loaded
                                 sendKeyExchange(from)
+                            }
+                        }
+                        return@ChatWebSocketClient
+                    }
+
+                    if (type == "profile_avatar") {
+                        val avatarBase64 = extractValue(received, "avatarBase64")
+                        val updatedAt = extractValue(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
+
+                        if (from.isNotBlank() && avatarBase64.isNotBlank()) {
+                            saveContactAvatar(from, avatarBase64, updatedAt) { loaded ->
+                                contacts = loaded
                             }
                         }
                         return@ChatWebSocketClient
@@ -370,6 +382,33 @@ class MainActivity : ComponentActivity() {
                     publicKey = publicKey ?: existingContact?.publicKey,
                     avatarBase64 = existingContact?.avatarBase64,
                     avatarUpdatedAt = existingContact?.avatarUpdatedAt,
+                    createdAt = existingContact?.createdAt ?: now,
+                    lastSeenAt = existingContact?.lastSeenAt
+                )
+            )
+            ensureChat(contactId)
+            onLoaded(database.contactDao().getContactsOnce())
+        }
+    }
+
+    private fun saveContactAvatar(
+        contactId: String,
+        avatarBase64: String,
+        updatedAt: Long,
+        onLoaded: (List<ContactEntity>) -> Unit
+    ) {
+        lifecycleScope.launch {
+            val now = System.currentTimeMillis()
+            val existingContact = database.contactDao().findByUsername(contactId)
+
+            database.contactDao().save(
+                ContactEntity(
+                    id = existingContact?.id ?: 0,
+                    username = contactId,
+                    displayName = existingContact?.displayName ?: UNKNOWN_CONTACT_NAME,
+                    publicKey = existingContact?.publicKey,
+                    avatarBase64 = avatarBase64,
+                    avatarUpdatedAt = updatedAt,
                     createdAt = existingContact?.createdAt ?: now,
                     lastSeenAt = existingContact?.lastSeenAt
                 )
