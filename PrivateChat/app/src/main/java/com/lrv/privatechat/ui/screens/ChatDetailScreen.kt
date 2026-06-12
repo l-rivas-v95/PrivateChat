@@ -1,6 +1,7 @@
 package com.lrv.privatechat.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +56,7 @@ fun ChatDetailScreen(
 ) {
     var message by remember { mutableStateOf("") }
     var showSaveContactDialog by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
     var showClearChatDialog by remember { mutableStateOf(false) }
 
     if (showSaveContactDialog) {
@@ -65,6 +67,40 @@ fun ChatDetailScreen(
             onSave = { newName, publicKey ->
                 onSaveContact(newName, publicKey)
                 showSaveContactDialog = false
+            }
+        )
+    }
+
+    if (showEditNameDialog) {
+        var editedName by remember(showEditNameDialog) { mutableStateOf(contactName) }
+
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text("Editar contacto") },
+            text = {
+                OutlinedTextField(
+                    value = editedName,
+                    onValueChange = { editedName = it },
+                    label = { Text("Nombre") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (editedName.isNotBlank()) {
+                            onSaveContact(editedName.trim(), null)
+                            showEditNameDialog = false
+                        }
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text("Cancelar")
+                }
             }
         )
     }
@@ -112,7 +148,9 @@ fun ChatDetailScreen(
                     Surface(
                         shape = CircleShape,
                         color = appColor.light,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clickable { showEditNameDialog = true }
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
@@ -125,7 +163,11 @@ fun ChatDetailScreen(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { showEditNameDialog = true }
+                    ) {
                         Text(
                             text = contactName,
                             style = MaterialTheme.typography.titleMedium,
@@ -133,7 +175,7 @@ fun ChatDetailScreen(
                             color = Color.White
                         )
                         Text(
-                            text = contact.take(12) + "...",
+                            text = "Toca para editar",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
