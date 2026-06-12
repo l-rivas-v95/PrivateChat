@@ -19,6 +19,9 @@ interface ChatMessageDao {
     @Query("UPDATE chat_messages SET deliveryStatus = :status WHERE messageId = :messageId")
     suspend fun updateDeliveryStatusByMessageId(messageId: String, status: String)
 
+    @Query("DELETE FROM chat_messages WHERE chatId = :chatId")
+    suspend fun deleteMessagesByChatId(chatId: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveChatMessage(entity: MessageEntity): Long
 }
