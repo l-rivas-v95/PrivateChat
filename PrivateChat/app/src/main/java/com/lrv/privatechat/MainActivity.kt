@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
         val preferences = remember { getSharedPreferences("private_chat_settings", Context.MODE_PRIVATE) }
 
         var username by remember { mutableStateOf(preferences.getString("username", "luis") ?: "luis") }
+        var connectedUsername by remember { mutableStateOf(preferences.getString("connected_username", "luis") ?: "luis") }
         var selectedColor by remember {
             mutableStateOf(
                 AppColor.valueOf(preferences.getString("color", AppColor.GREEN.name) ?: AppColor.GREEN.name)
@@ -84,7 +85,7 @@ class MainActivity : ComponentActivity() {
         }
         var status by remember { mutableStateOf("Desconectado") }
         var messages by remember { mutableStateOf(listOf<UiMessage>()) }
-        val contacts = remember { listOf("ana", "carlos", "pepe") }
+        val contacts = remember { listOf("ana", "carlos", "pepe", "luis") }
 
         LaunchedEffect(Unit) {
             seedContacts(contacts)
@@ -114,18 +115,24 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        val visibleContacts = contacts.filter { it != connectedUsername }
+
         NavHost(
             navController = navController,
             startDestination = "chats"
         ) {
             composable("chats") {
                 ChatsScreen(
-                    username = username,
+                    username = connectedUsername,
                     status = status,
                     appColor = selectedColor,
-                    contacts = contacts,
+                    contacts = visibleContacts,
                     messages = messages,
-                    onConnect = { chatClient.connect(username) },
+                    onConnect = {
+                        connectedUsername = username
+                        preferences.edit().putString("connected_username", username).apply()
+                        chatClient.connect(username)
+                    },
                     onOpenChat = { contact -> navController.navigate("chat/$contact") },
                     onOpenProfile = { navController.navigate("profile") }
                 )
@@ -138,21 +145,21 @@ class MainActivity : ComponentActivity() {
                 val contact = backStackEntry.arguments?.getString("contact") ?: ""
 
                 ChatDetailScreen(
-                    username = username,
+                    username = connectedUsername,
                     contact = contact,
                     appColor = selectedColor,
                     messages = messages.filter {
-                        (it.from == username && it.to == contact) ||
-                                (it.from == contact && it.to == username)
+                        (it.from == connectedUsername && it.to == contact) ||
+                                (it.from == contact && it.to == connectedUsername)
                     },
                     onBack = { navController.popBackStack() },
                     onSend = { text ->
-                        val json = "{\"from\":\"$username\",\"to\":\"$contact\",\"text\":\"$text\"}"
+                        val json = "{\"from\":\"$connectedUsername\",\"to\":\"$contact\",\"text\":\"$text\"}"
 
                         chatClient.send(json)
 
                         val uiMessage = UiMessage(
-                            from = username,
+                            from = connectedUsername,
                             to = contact,
                             text = text,
                             mine = true
