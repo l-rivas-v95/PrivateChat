@@ -240,6 +240,7 @@ class MainActivity : ComponentActivity() {
                     username = connectedUserId,
                     contact = contact,
                     contactName = contactName,
+                    contactAvatarBase64 = storedContact?.avatarBase64,
                     isUnknownContact = isUnknownContact,
                     appColor = selectedColor,
                     messages = messages.filter {
@@ -344,6 +345,8 @@ class MainActivity : ComponentActivity() {
                     username = contactId,
                     displayName = nextDisplayName,
                     publicKey = publicKey ?: existingContact?.publicKey,
+                    avatarBase64 = existingContact?.avatarBase64,
+                    avatarUpdatedAt = existingContact?.avatarUpdatedAt,
                     createdAt = existingContact?.createdAt ?: now,
                     lastSeenAt = existingContact?.lastSeenAt
                 )
