@@ -19,6 +19,9 @@ interface ChatDao {
     @Query("SELECT * FROM chats WHERE contactUsername = :contactUsername LIMIT 1")
     suspend fun findByContact(contactUsername: String): ChatEntity?
 
+    @Query("DELETE FROM chats WHERE contactUsername = :contactUsername")
+    suspend fun deleteChatByContact(contactUsername: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(chat: ChatEntity): Long
 }
