@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lrv.privatechat.crypto.ChatCryptoService
 import com.lrv.privatechat.crypto.KeyPairManager
 import com.lrv.privatechat.data.PrivateChatDatabase
 import com.lrv.privatechat.data.entity.ChatEntity
@@ -41,12 +42,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var chatClient: ChatWebSocketClient
     private lateinit var database: PrivateChatDatabase
     private lateinit var keyPairManager: KeyPairManager
+    private lateinit var chatCryptoService: ChatCryptoService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         database = PrivateChatDatabase.getInstance(this)
         keyPairManager = KeyPairManager(this)
         keyPairManager.getOrCreateKeyPair()
+        chatCryptoService = ChatCryptoService(keyPairManager)
 
         setContent {
             PrivateChatTheme {
@@ -123,7 +126,7 @@ class MainActivity : ComponentActivity() {
 
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
-                    val text = extractValue(received, "text")
+                    val text = chatCryptoService.readPlainTextFromPayload(received, from, contacts)
                     val messageId = extractValue(received, "id").ifBlank { UUID.randomUUID().toString() }
 
                     if (from.isNotBlank() && text.isNotBlank()) {
@@ -213,7 +216,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onSend = { text ->
                         val messageId = UUID.randomUUID().toString()
-                        val json = "{\"id\":\"$messageId\",\"from\":\"$connectedUserId\",\"to\":\"$contact\",\"text\":\"$text\"}"
+                        val json = chatCryptoService.buildOutgoingPayload(
+                            messageId = messageId,
+                            from = connectedUserId,
+                            to = contact,
+                            plainText = text,
+                            contact = storedContact
+                        )
 
                         chatClient.send(json)
 
