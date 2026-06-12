@@ -30,6 +30,7 @@ import com.lrv.privatechat.data.entity.ContactEntity
 import com.lrv.privatechat.data.entity.MessageEntity
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -38,7 +39,8 @@ private data class UiMessage(
     val to: String,
     val text: String,
     val mine: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val status: String = if (mine) "SENT" else "RECEIVED"
 )
 
 private data class Conversation(
@@ -96,12 +98,21 @@ class MainActivity : ComponentActivity() {
         var contacts by remember { mutableStateOf(listOf<ContactEntity>()) }
         var showNewChatDialog by remember { mutableStateOf(false) }
 
+        fun reloadMessages() {
+            loadMessagesFromDatabase { loaded -> messages = loaded }
+        }
+
         LaunchedEffect(Unit) {
             loadContactsFromDatabase { loaded -> contacts = loaded }
-            loadMessagesFromDatabase { loaded -> messages = loaded }
+            reloadMessages()
 
             chatClient = ChatWebSocketClient(
                 onMessageReceived = { received ->
+                    if (received.startsWith("Usuario offline:")) {
+                        markLastSentMessageAsPending { reloadMessages() }
+                        return@ChatWebSocketClient
+                    }
+
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
                     val text = extractValue(received, "text")
@@ -111,11 +122,12 @@ class MainActivity : ComponentActivity() {
                             from = from,
                             to = to,
                             text = text,
-                            mine = false
+                            mine = false,
+                            status = "RECEIVED"
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = from)
+                        saveMessageToDatabase(uiMessage, contactUsername = from, status = "RECEIVED")
                         if (contacts.none { it.username == from }) {
                             saveContact(from, from) { contacts = it }
                         }
@@ -123,6 +135,9 @@ class MainActivity : ComponentActivity() {
                 },
                 onStatusChanged = { newStatus ->
                     status = newStatus
+                    if (newStatus == "Conectado") {
+                        retryPendingMessages { reloadMessages() }
+                    }
                 }
             )
         }
@@ -189,11 +204,12 @@ class MainActivity : ComponentActivity() {
                             from = connectedUserId,
                             to = contact,
                             text = text,
-                            mine = true
+                            mine = true,
+                            status = "SENT"
                         )
 
                         messages = messages + uiMessage
-                        saveMessageToDatabase(uiMessage, contactUsername = contact)
+                        saveMessageToDatabase(uiMessage, contactUsername = contact, status = "SENT")
                     }
                 )
             }
@@ -580,7 +596,11 @@ class MainActivity : ComponentActivity() {
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = if (message.mine) "enviado" else message.from.take(8) + "...",
+                        text = when {
+                            !message.mine -> message.from.take(8) + "..."
+                            message.status == "PENDING" -> "pendiente"
+                            else -> "enviado"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF777777),
                         modifier = Modifier.align(Alignment.End)
@@ -770,7 +790,8 @@ class MainActivity : ComponentActivity() {
                             to = entity.receiverUsername,
                             text = entity.body,
                             mine = entity.isMine,
-                            timestamp = entity.timestamp
+                            timestamp = entity.timestamp,
+                            status = entity.deliveryStatus
                         )
                     }
 
@@ -781,7 +802,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun saveMessageToDatabase(message: UiMessage, contactUsername: String) {
+    private fun saveMessageToDatabase(
+        message: UiMessage,
+        contactUsername: String,
+        status: String
+    ) {
         lifecycleScope.launch {
             val chat = ensureChat(contactUsername)
 
@@ -793,7 +818,7 @@ class MainActivity : ComponentActivity() {
                     body = message.text,
                     timestamp = message.timestamp,
                     isMine = message.mine,
-                    deliveryStatus = if (message.mine) "SENT" else "RECEIVED"
+                    deliveryStatus = status
                 )
             )
 
@@ -803,6 +828,35 @@ class MainActivity : ComponentActivity() {
                     lastMessagePreview = message.text
                 )
             )
+        }
+    }
+
+    private fun markLastSentMessageAsPending(onDone: () -> Unit) {
+        lifecycleScope.launch {
+            val pendingCandidate = database.chatMessageDao()
+                .getPendingCandidateMessagesOnce()
+                .firstOrNull()
+
+            if (pendingCandidate != null) {
+                database.chatMessageDao().updateDeliveryStatus(pendingCandidate.id, "PENDING")
+            }
+
+            onDone()
+        }
+    }
+
+    private fun retryPendingMessages(onDone: () -> Unit) {
+        lifecycleScope.launch {
+            delay(500)
+            val pendingMessages = database.chatMessageDao().getPendingMessagesOnce()
+
+            pendingMessages.forEach { pending ->
+                val json = "{\"from\":\"${pending.senderUsername}\",\"to\":\"${pending.receiverUsername}\",\"text\":\"${pending.body}\"}"
+                chatClient.send(json)
+                database.chatMessageDao().updateDeliveryStatus(pending.id, "SENT")
+            }
+
+            onDone()
         }
     }
 
