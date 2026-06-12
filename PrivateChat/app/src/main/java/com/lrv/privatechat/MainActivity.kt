@@ -1,5 +1,6 @@
 package com.lrv.privatechat
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,10 +9,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
@@ -34,6 +38,16 @@ private data class Conversation(
     val lastMessage: String
 )
 
+private enum class AppColor(
+    val label: String,
+    val main: Color,
+    val light: Color
+) {
+    GREEN("Verde", Color(0xFF075E54), Color(0xFFD9FDD3)),
+    BLUE("Azul", Color(0xFF0B5CAD), Color(0xFFD8EAFE)),
+    PURPLE("Morado", Color(0xFF6750A4), Color(0xFFEADDFF))
+}
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var chatClient: ChatWebSocketClient
@@ -51,8 +65,14 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun PrivateChatApp() {
         val navController = rememberNavController()
+        val preferences = remember { getSharedPreferences("private_chat_settings", Context.MODE_PRIVATE) }
 
-        var username by remember { mutableStateOf("luis") }
+        var username by remember { mutableStateOf(preferences.getString("username", "luis") ?: "luis") }
+        var selectedColor by remember {
+            mutableStateOf(
+                AppColor.valueOf(preferences.getString("color", AppColor.GREEN.name) ?: AppColor.GREEN.name)
+            )
+        }
         var status by remember { mutableStateOf("Desconectado") }
         var messages by remember { mutableStateOf(listOf<UiMessage>()) }
         val contacts = remember { listOf("ana", "carlos", "pepe") }
@@ -87,14 +107,12 @@ class MainActivity : ComponentActivity() {
                 ChatsScreen(
                     username = username,
                     status = status,
+                    appColor = selectedColor,
                     contacts = contacts,
                     messages = messages,
-                    onOpenChat = { contact ->
-                        navController.navigate("chat/$contact")
-                    },
-                    onOpenProfile = {
-                        navController.navigate("profile")
-                    }
+                    onConnect = { chatClient.connect(username) },
+                    onOpenChat = { contact -> navController.navigate("chat/$contact") },
+                    onOpenProfile = { navController.navigate("profile") }
                 )
             }
 
@@ -107,13 +125,12 @@ class MainActivity : ComponentActivity() {
                 ChatDetailScreen(
                     username = username,
                     contact = contact,
+                    appColor = selectedColor,
                     messages = messages.filter {
                         (it.from == username && it.to == contact) ||
                                 (it.from == contact && it.to == username)
                     },
-                    onBack = {
-                        navController.popBackStack()
-                    },
+                    onBack = { navController.popBackStack() },
                     onSend = { text ->
                         val json = "{\"from\":\"$username\",\"to\":\"$contact\",\"text\":\"$text\"}"
 
@@ -132,14 +149,16 @@ class MainActivity : ComponentActivity() {
             composable("profile") {
                 ProfileSettingsScreen(
                     username = username,
-                    status = status,
-                    onUsernameChange = { username = it },
-                    onConnect = {
-                        chatClient.connect(username)
+                    appColor = selectedColor,
+                    onUsernameChange = { newName ->
+                        username = newName
+                        preferences.edit().putString("username", newName).apply()
                     },
-                    onBack = {
-                        navController.popBackStack()
-                    }
+                    onColorChange = { color ->
+                        selectedColor = color
+                        preferences.edit().putString("color", color.name).apply()
+                    },
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
@@ -149,37 +168,67 @@ class MainActivity : ComponentActivity() {
     private fun ChatsScreen(
         username: String,
         status: String,
+        appColor: AppColor,
         contacts: List<String>,
         messages: List<UiMessage>,
+        onConnect: () -> Unit,
         onOpenChat: (String) -> Unit,
         onOpenProfile: () -> Unit
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(Color(0xFFF7F7F7))
         ) {
-            Surface(tonalElevation = 4.dp) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Surface(color = appColor.main) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "PrivateChat",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "$username · $status",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "PrivateChat",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "$username · $status",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+
+                        TextButton(onClick = onOpenProfile) {
+                            Text("Perfil", color = Color.White)
+                        }
                     }
 
-                    Button(onClick = onOpenProfile) {
-                        Text("Perfil")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = onConnect,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                        ) {
+                            Text("Conectar", color = appColor.main)
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Text(
+                            text = if (status == "Conectado") "Listo para chatear" else "Pulsa conectar para entrar",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 }
             }
@@ -196,13 +245,9 @@ class MainActivity : ComponentActivity() {
                         ?.text ?: "Sin mensajes todavía"
 
                     ConversationRow(
-                        conversation = Conversation(
-                            username = contact,
-                            lastMessage = lastMessage
-                        ),
-                        onClick = {
-                            onOpenChat(contact)
-                        }
+                        conversation = Conversation(contact, lastMessage),
+                        appColor = appColor,
+                        onClick = { onOpenChat(contact) }
                     )
                 }
             }
@@ -212,42 +257,54 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ConversationRow(
         conversation: Conversation,
+        appColor: AppColor,
         onClick: () -> Unit
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(Color.White)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(48.dp)
+                shape = CircleShape,
+                color = appColor.light,
+                modifier = Modifier.size(52.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = conversation.username.first().uppercase(),
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = appColor.main
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = conversation.username,
+                    text = conversation.username.replaceFirstChar { it.uppercase() },
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF111111)
                 )
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = conversation.lastMessage,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666),
                     maxLines = 1
                 )
             }
+
+            Text(
+                text = "ahora",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF777777)
+            )
         }
     }
 
@@ -255,6 +312,7 @@ class MainActivity : ComponentActivity() {
     private fun ChatDetailScreen(
         username: String,
         contact: String,
+        appColor: AppColor,
         messages: List<UiMessage>,
         onBack: () -> Unit,
         onSend: (String) -> Unit
@@ -264,28 +322,46 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(Color(0xFFECE5DD))
         ) {
-            Surface(tonalElevation = 4.dp) {
+            Surface(color = appColor.main) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onBack) {
-                        Text("←")
+                        Text("←", color = Color.White)
                     }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = appColor.light,
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = contact.first().uppercase(),
+                                fontWeight = FontWeight.Bold,
+                                color = appColor.main
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     Column {
                         Text(
-                            text = contact,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            text = contact.replaceFirstChar { it.uppercase() },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                         Text(
-                            text = "Chat privado",
-                            style = MaterialTheme.typography.bodySmall
+                            text = "En línea",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f)
                         )
                     }
                 }
@@ -297,68 +373,72 @@ class MainActivity : ComponentActivity() {
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { msg ->
-                    MessageBubble(msg)
-                }
+                items(messages) { msg -> MessageBubble(msg, appColor) }
             }
 
-            Surface(tonalElevation = 4.dp) {
-                Row(
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    placeholder = { Text("Mensaje") },
+                    shape = RoundedCornerShape(28.dp),
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = message,
-                        onValueChange = { message = it },
-                        label = { Text("Mensaje") },
-                        modifier = Modifier.weight(1f)
-                    )
+                        .weight(1f)
+                        .background(Color.White, RoundedCornerShape(28.dp))
+                )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                    Button(
-                        onClick = {
-                            if (message.isNotBlank()) {
-                                onSend(message)
-                                message = ""
-                            }
+                Button(
+                    onClick = {
+                        if (message.isNotBlank()) {
+                            onSend(message)
+                            message = ""
                         }
-                    ) {
-                        Text("Enviar")
-                    }
+                    },
+                    shape = CircleShape,
+                    modifier = Modifier.size(54.dp),
+                    contentPadding = PaddingValues(0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+                ) {
+                    Text("➤", color = Color.White)
                 }
             }
         }
     }
 
     @Composable
-    private fun MessageBubble(message: UiMessage) {
+    private fun MessageBubble(
+        message: UiMessage,
+        appColor: AppColor
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = if (message.mine) Arrangement.End else Arrangement.Start
         ) {
             Surface(
-                shape = MaterialTheme.shapes.medium,
-                tonalElevation = 2.dp,
-                color = if (message.mine)
-                    MaterialTheme.colorScheme.primaryContainer
-                else
-                    MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.widthIn(max = 280.dp)
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 1.dp,
+                color = if (message.mine) appColor.light else Color.White,
+                modifier = Modifier.widthIn(max = 290.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Text(
-                        text = if (message.mine) "Tú" else message.from,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
                         text = message.text,
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFF111111)
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = if (message.mine) "enviado" else message.from,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF777777),
+                        modifier = Modifier.align(Alignment.End)
                     )
                 }
             }
@@ -368,71 +448,103 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ProfileSettingsScreen(
         username: String,
-        status: String,
+        appColor: AppColor,
         onUsernameChange: (String) -> Unit,
-        onConnect: () -> Unit,
+        onColorChange: (AppColor) -> Unit,
         onBack: () -> Unit
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp)
+                .background(Color(0xFFF7F7F7))
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = onBack) {
-                    Text("←")
+            Surface(color = appColor.main) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onBack) {
+                        Text("←", color = Color.White)
+                    }
+                    Text(
+                        text = "Perfil",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
-                Text(
-                    text = "Perfil y ajustes",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Surface(
-                tonalElevation = 2.dp,
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Identidad local",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Nombre",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                    OutlinedTextField(
-                        value = username,
-                        onValueChange = onUsernameChange,
-                        label = { Text("Tu usuario") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        OutlinedTextField(
+                            value = username,
+                            onValueChange = onUsernameChange,
+                            label = { Text("Tu nombre") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        text = "Estado: $status",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Color de la aplicación",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
 
-                    Text(
-                        text = "Servidor: ws://10.0.2.2:8080/chat",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        AppColor.values().forEach { color ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onColorChange(color) }
+                                    .padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = color.main,
+                                    modifier = Modifier.size(28.dp)
+                                ) {}
 
-                    Button(onClick = onConnect) {
-                        Text("Conectar")
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Text(
+                                    text = color.label,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                if (color == appColor) {
+                                    Text("Seleccionado", color = color.main)
+                                }
+                            }
+                        }
                     }
                 }
             }
