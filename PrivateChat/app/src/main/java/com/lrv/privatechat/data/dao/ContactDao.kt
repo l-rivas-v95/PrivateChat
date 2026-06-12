@@ -16,6 +16,9 @@ interface ContactDao {
     @Query("SELECT * FROM contacts ORDER BY displayName ASC")
     suspend fun getContactsOnce(): List<ContactEntity>
 
+    @Query("SELECT * FROM contacts WHERE username = :username LIMIT 1")
+    suspend fun findByUsername(username: String): ContactEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(contact: ContactEntity)
 }
