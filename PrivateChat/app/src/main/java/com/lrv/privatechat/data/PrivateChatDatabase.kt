@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lrv.privatechat.data.dao.ChatDao
 import com.lrv.privatechat.data.dao.ChatMessageDao
 import com.lrv.privatechat.data.dao.ContactDao
@@ -17,7 +19,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
         ChatEntity::class,
         MessageEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class PrivateChatDatabase : RoomDatabase() {
@@ -30,6 +32,13 @@ abstract class PrivateChatDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: PrivateChatDatabase? = null
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE contacts ADD COLUMN avatarBase64 TEXT")
+                database.execSQL("ALTER TABLE contacts ADD COLUMN avatarUpdatedAt INTEGER")
+            }
+        }
+
         fun getInstance(context: Context): PrivateChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -37,6 +46,7 @@ abstract class PrivateChatDatabase : RoomDatabase() {
                     PrivateChatDatabase::class.java,
                     "private_chat.db"
                 )
+                    .addMigrations(MIGRATION_3_4)
                     .fallbackToDestructiveMigration(false)
                     .build()
 
