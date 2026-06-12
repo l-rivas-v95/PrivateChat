@@ -19,6 +19,9 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE deliveryStatus = 'PENDING' ORDER BY timestamp ASC")
     suspend fun getPendingMessagesOnce(): List<MessageEntity>
 
+    @Query("SELECT * FROM chat_messages WHERE isMine = 1 AND deliveryStatus = 'SENT' ORDER BY timestamp DESC")
+    suspend fun getPendingCandidateMessagesOnce(): List<MessageEntity>
+
     @Query("UPDATE chat_messages SET deliveryStatus = :status WHERE id = :id")
     suspend fun updateDeliveryStatus(id: Long, status: String)
 
