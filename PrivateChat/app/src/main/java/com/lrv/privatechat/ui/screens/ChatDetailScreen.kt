@@ -49,6 +49,7 @@ fun ChatDetailScreen(
     onBack: () -> Unit,
     onSaveContact: (String, String?) -> Unit,
     onClearChat: () -> Unit,
+    onDeleteMessage: (UiMessage) -> Unit,
     onSend: (String) -> Unit
 ) {
     var message by remember { mutableStateOf("") }
@@ -147,7 +148,13 @@ fun ChatDetailScreen(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(messages) { msg -> MessageBubble(msg, appColor) }
+            items(messages) { msg ->
+                MessageBubble(
+                    message = msg,
+                    appColor = appColor,
+                    onDelete = onDeleteMessage
+                )
+            }
         }
 
         Row(
