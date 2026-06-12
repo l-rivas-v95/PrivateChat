@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 private data class UiMessage(
+    val id: String = UUID.randomUUID().toString(),
     val from: String,
     val to: String,
     val text: String,
@@ -121,9 +122,11 @@ class MainActivity : ComponentActivity() {
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
                     val text = extractValue(received, "text")
+                    val messageId = extractValue(received, "id").ifBlank { UUID.randomUUID().toString() }
 
                     if (from.isNotBlank() && text.isNotBlank()) {
                         val uiMessage = UiMessage(
+                            id = messageId,
                             from = from,
                             to = to,
                             text = text,
@@ -200,11 +203,13 @@ class MainActivity : ComponentActivity() {
                     },
                     onBack = { navController.popBackStack() },
                     onSend = { text ->
-                        val json = "{\"from\":\"$connectedUserId\",\"to\":\"$contact\",\"text\":\"$text\"}"
+                        val messageId = UUID.randomUUID().toString()
+                        val json = "{\"id\":\"$messageId\",\"from\":\"$connectedUserId\",\"to\":\"$contact\",\"text\":\"$text\"}"
 
                         chatClient.send(json)
 
                         val uiMessage = UiMessage(
+                            id = messageId,
                             from = connectedUserId,
                             to = contact,
                             text = text,
@@ -790,6 +795,7 @@ class MainActivity : ComponentActivity() {
                 val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
                     .map { entity ->
                         UiMessage(
+                            id = entity.messageId,
                             from = entity.senderUsername,
                             to = entity.receiverUsername,
                             text = entity.body,
@@ -816,6 +822,7 @@ class MainActivity : ComponentActivity() {
 
             database.chatMessageDao().saveChatMessage(
                 MessageEntity(
+                    messageId = message.id,
                     chatId = chat.id,
                     senderUsername = message.from,
                     receiverUsername = message.to,
