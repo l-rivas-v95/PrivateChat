@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
         var localUserId by remember { mutableStateOf(initialUserId) }
         var connectedUserId by remember { mutableStateOf(localUserId) }
-        var displayName by remember { mutableStateOf(preferences.getString("display_name", "User") ?: "Luis") }
+        var displayName by remember { mutableStateOf(preferences.getString("display_name", "User") ?: "User") }
         var localAvatarBase64 by remember { mutableStateOf(preferences.getString("local_avatar_base64", null)) }
         var selectedColor by remember {
             mutableStateOf(
@@ -90,17 +90,6 @@ class MainActivity : ComponentActivity() {
         var contacts by remember { mutableStateOf(listOf<ContactEntity>()) }
         var showNewChatDialog by remember { mutableStateOf(false) }
 
-        val avatarPicker = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.GetContent()
-        ) { uri ->
-            if (uri != null) {
-                encodeAvatarToBase64(uri)?.let { encoded ->
-                    localAvatarBase64 = encoded
-                    preferences.edit().putString("local_avatar_base64", encoded).apply()
-                }
-            }
-        }
-
         fun reloadMessages() {
             loadMessagesFromDatabase { loaded -> messages = loaded }
         }
@@ -109,19 +98,36 @@ class MainActivity : ComponentActivity() {
             loadContactsFromDatabase { loaded -> contacts = loaded }
         }
 
+        fun sendKeyExchange(to: String) {
+            chatClient.send(chatCryptoService.buildKeyExchangePayload(connectedUserId, to))
+        }
+
+        fun sendAvatarToContact(contactUsername: String, avatarBase64: String) {
+            chatClient.send(
+                buildProfileAvatarPayload(
+                    from = connectedUserId,
+                    to = contactUsername,
+                    avatarBase64 = avatarBase64
+                )
+            )
+        }
+
+        fun sendAvatarToContacts(avatarBase64: String) {
+            contacts
+                .filter { it.username != connectedUserId }
+                .forEach { contact -> sendAvatarToContact(contact.username, avatarBase64) }
+        }
+
         fun connect() {
             connectedUserId = localUserId
             preferences.edit().putString("connected_user_id", localUserId).apply()
             chatClient.connect(localUserId)
+            localAvatarBase64?.let { sendAvatarToContacts(it) }
         }
 
         fun disconnect() {
             chatClient.disconnect()
             status = "Desconectado"
-        }
-
-        fun sendKeyExchange(to: String) {
-            chatClient.send(chatCryptoService.buildKeyExchangePayload(connectedUserId, to))
         }
 
         fun addSystemMessage(contact: String, text: String) {
@@ -134,6 +140,20 @@ class MainActivity : ComponentActivity() {
             )
         }
 
+        val avatarPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.GetContent()
+        ) { uri ->
+            if (uri != null) {
+                encodeAvatarToBase64(uri)?.let { encoded ->
+                    localAvatarBase64 = encoded
+                    preferences.edit().putString("local_avatar_base64", encoded).apply()
+                    if (status == "Conectado") {
+                        sendAvatarToContacts(encoded)
+                    }
+                }
+            }
+        }
+
         LaunchedEffect(Unit) {
             reloadContacts()
             reloadMessages()
@@ -141,36 +161,43 @@ class MainActivity : ComponentActivity() {
             chatClient = ChatWebSocketClient(
                 onMessageReceived = { received ->
                     val type = extractValue(received, "type")
+                    val from = extractValue(received, "from")
 
-                    if (type == "ack") {
-                        val messageId = extractValue(received, "messageId")
-                        if (messageId.isNotBlank()) {
-                            messages = messages.map { message ->
-                                if (message.id == messageId) {
-                                    message.copy(status = MESSAGE_STATUS_DELIVERED)
-                                } else {
-                                    message
+                    when (type) {
+                        "ack" -> {
+                            val messageId = extractValue(received, "messageId")
+                            if (messageId.isNotBlank()) {
+                                messages = messages.map { message ->
+                                    if (message.id == messageId) message.copy(status = MESSAGE_STATUS_DELIVERED) else message
+                                }
+                                updateMessageStatus(messageId, MESSAGE_STATUS_DELIVERED) { reloadMessages() }
+                            }
+                            return@ChatWebSocketClient
+                        }
+
+                        "key_exchange" -> {
+                            val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
+                            if (from.isNotBlank() && publicKey.isNotBlank()) {
+                                saveContact(from, UNKNOWN_CONTACT_NAME, publicKey) { loaded ->
+                                    contacts = loaded
+                                    sendKeyExchange(from)
+                                    localAvatarBase64?.let { sendAvatarToContact(from, it) }
                                 }
                             }
-                            updateMessageStatus(messageId, MESSAGE_STATUS_DELIVERED) { reloadMessages() }
+                            return@ChatWebSocketClient
                         }
-                        return@ChatWebSocketClient
-                    }
 
-                    val from = extractValue(received, "from")
-                    val to = extractValue(received, "to")
-
-                    if (type == "key_exchange") {
-                        val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
-                        if (from.isNotBlank() && publicKey.isNotBlank()) {
-                            saveContact(from, UNKNOWN_CONTACT_NAME, publicKey) { loaded ->
-                                contacts = loaded
-                                sendKeyExchange(from)
+                        "profile_avatar" -> {
+                            val avatarBase64 = extractValue(received, "avatarBase64")
+                            val updatedAt = extractValue(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
+                            if (from.isNotBlank() && avatarBase64.isNotBlank()) {
+                                saveContactAvatar(from, avatarBase64, updatedAt) { loaded -> contacts = loaded }
                             }
+                            return@ChatWebSocketClient
                         }
-                        return@ChatWebSocketClient
                     }
 
+                    val to = extractValue(received, "to")
                     val text = chatCryptoService.readPlainTextFromPayload(received, from, contacts)
                     val messageId = extractValue(received, "id").ifBlank { UUID.randomUUID().toString() }
 
@@ -191,9 +218,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 },
-                onStatusChanged = { newStatus ->
-                    status = newStatus
-                }
+                onStatusChanged = { newStatus -> status = newStatus }
             )
 
             connect()
@@ -204,8 +229,9 @@ class MainActivity : ComponentActivity() {
                 appColor = selectedColor,
                 onDismiss = { showNewChatDialog = false },
                 onSaveManual = { contactId, contactName, publicKey ->
-                    saveContact(contactId, contactName, publicKey) { contacts = it }
+                    saveContact(contactId, contactName, publicKey) { loaded -> contacts = loaded }
                     sendKeyExchange(contactId)
+                    localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
                     showNewChatDialog = false
                 }
             )
@@ -268,8 +294,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onBack = { navController.popBackStack() },
                     onSaveContact = { newName, publicKey ->
-                        saveContact(contact, newName, publicKey) { contacts = it }
+                        saveContact(contact, newName, publicKey) { loaded -> contacts = loaded }
                         sendKeyExchange(contact)
+                        localAvatarBase64?.let { sendAvatarToContact(contact, it) }
                     },
                     onClearChat = {
                         clearChatMessages(contact) {
@@ -328,9 +355,7 @@ class MainActivity : ComponentActivity() {
                         displayName = newName
                         preferences.edit().putString("display_name", newName).apply()
                     },
-                    onAvatarClick = {
-                        avatarPicker.launch("image/*")
-                    },
+                    onAvatarClick = { avatarPicker.launch("image/*") },
                     onColorChange = { color ->
                         selectedColor = color
                         preferences.edit().putString("color", color.name).apply()
@@ -379,6 +404,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun saveContactAvatar(
+        contactId: String,
+        avatarBase64: String,
+        updatedAt: Long,
+        onLoaded: (List<ContactEntity>) -> Unit
+    ) {
+        lifecycleScope.launch {
+            val now = System.currentTimeMillis()
+            val existingContact = database.contactDao().findByUsername(contactId)
+
+            database.contactDao().save(
+                ContactEntity(
+                    id = existingContact?.id ?: 0,
+                    username = contactId,
+                    displayName = existingContact?.displayName ?: UNKNOWN_CONTACT_NAME,
+                    publicKey = existingContact?.publicKey,
+                    avatarBase64 = avatarBase64,
+                    avatarUpdatedAt = updatedAt,
+                    createdAt = existingContact?.createdAt ?: now,
+                    lastSeenAt = existingContact?.lastSeenAt
+                )
+            )
+            ensureChat(contactId)
+            onLoaded(database.contactDao().getContactsOnce())
+        }
+    }
+
     private fun loadMessagesFromDatabase(onLoaded: (List<UiMessage>) -> Unit) {
         lifecycleScope.launch {
             val chats = database.chatDao().getAllChatsOnce()
@@ -405,11 +457,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun saveMessageToDatabase(
-        message: UiMessage,
-        contactUsername: String,
-        status: String
-    ) {
+    private fun saveMessageToDatabase(message: UiMessage, contactUsername: String, status: String) {
         lifecycleScope.launch {
             val chat = ensureChat(contactUsername)
 
@@ -486,6 +534,12 @@ class MainActivity : ComponentActivity() {
             scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
             Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
         }.getOrNull()
+    }
+
+    private fun buildProfileAvatarPayload(from: String, to: String, avatarBase64: String): String {
+        return """
+            {"type":"profile_avatar","from":"$from","to":"$to","avatarBase64":"$avatarBase64","updatedAt":"${System.currentTimeMillis()}"}
+        """.trimIndent()
     }
 
     private suspend fun ensureChat(contactUsername: String): ChatEntity {
