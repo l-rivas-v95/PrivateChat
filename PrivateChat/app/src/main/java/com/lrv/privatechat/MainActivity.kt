@@ -250,6 +250,11 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
+                    onDeleteMessage = { message ->
+                        deleteMessage(message.id) {
+                            messages = messages.filterNot { it.id == message.id }
+                        }
+                    },
                     onSend = { text ->
                         if (storedContact?.publicKey.isNullOrBlank()) {
                             sendKeyExchange(contact)
@@ -405,6 +410,13 @@ class MainActivity : ComponentActivity() {
                     lastMessagePreview = "Sin mensajes todavía"
                 )
             )
+            onDone()
+        }
+    }
+
+    private fun deleteMessage(messageId: String, onDone: () -> Unit) {
+        lifecycleScope.launch {
+            database.chatMessageDao().deleteMessageByMessageId(messageId)
             onDone()
         }
     }
