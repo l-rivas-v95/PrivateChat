@@ -14,6 +14,8 @@ class ChatWebSocketClient(
     private var webSocket: WebSocket? = null
 
     fun connect(username: String) {
+        disconnect()
+
         val request = Request.Builder()
             .url("ws://10.0.2.2:8080/chat?user=$username")
             .build()
@@ -29,10 +31,12 @@ class ChatWebSocketClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                this@ChatWebSocketClient.webSocket = null
                 onStatusChanged("Error: ${t.message}")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                this@ChatWebSocketClient.webSocket = null
                 onStatusChanged("Desconectado")
             }
         })
@@ -44,5 +48,6 @@ class ChatWebSocketClient(
 
     fun disconnect() {
         webSocket?.close(1000, "Cierre normal")
+        webSocket = null
     }
 }
