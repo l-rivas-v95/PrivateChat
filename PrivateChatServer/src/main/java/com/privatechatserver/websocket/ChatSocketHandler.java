@@ -6,18 +6,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-
-import org.springframework.stereotype.Component;
 
 @Component
 public class ChatSocketHandler extends TextWebSocketHandler {
 
     private final Map<String, WebSocketSession> users = new ConcurrentHashMap<>();
     private final Map<String, List<String>> pendingMessages = new ConcurrentHashMap<>();
+    private final Map<String, List<String>> pendingAcks = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -31,15 +31,8 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         users.put(user, session);
         System.out.println("Usuario conectado: " + user);
 
-        List<String> pending = pendingMessages.remove(user);
-
-        if (pending != null) {
-            for (String message : pending) {
-                session.sendMessage(new TextMessage(message));
-            }
-
-            System.out.println("Mensajes pendientes entregados a " + user + ": " + pending.size());
-        }
+        deliverPendingMessages(user, session);
+        deliverPendingAcks(user, session);
     }
 
     @Override
@@ -57,6 +50,7 @@ public class ChatSocketHandler extends TextWebSocketHandler {
 
         if (receiverSession != null && receiverSession.isOpen()) {
             receiverSession.sendMessage(new TextMessage(payload));
+            sendOrQueueAck(payload);
             return;
         }
 
@@ -65,6 +59,59 @@ public class ChatSocketHandler extends TextWebSocketHandler {
                 .add(payload);
 
         System.out.println("Mensaje pendiente guardado para: " + to);
+    }
+
+    private void deliverPendingMessages(String user, WebSocketSession session) throws Exception {
+        List<String> pending = pendingMessages.remove(user);
+
+        if (pending == null) {
+            return;
+        }
+
+        for (String payload : pending) {
+            session.sendMessage(new TextMessage(payload));
+            sendOrQueueAck(payload);
+        }
+
+        System.out.println("Mensajes pendientes entregados a " + user + ": " + pending.size());
+    }
+
+    private void deliverPendingAcks(String user, WebSocketSession session) throws Exception {
+        List<String> acks = pendingAcks.remove(user);
+
+        if (acks == null) {
+            return;
+        }
+
+        for (String ack : acks) {
+            session.sendMessage(new TextMessage(ack));
+        }
+
+        System.out.println("ACK pendientes entregados a " + user + ": " + acks.size());
+    }
+
+    private void sendOrQueueAck(String payload) throws Exception {
+        String from = extractValue(payload, "from");
+        String messageId = extractValue(payload, "id");
+
+        if (from == null || from.isBlank() || messageId == null || messageId.isBlank()) {
+            return;
+        }
+
+        String ack = "{\"type\":\"ack\",\"messageId\":\"" + messageId + "\",\"status\":\"DELIVERED\"}";
+
+        WebSocketSession senderSession = users.get(from);
+
+        if (senderSession != null && senderSession.isOpen()) {
+            senderSession.sendMessage(new TextMessage(ack));
+            return;
+        }
+
+        pendingAcks
+                .computeIfAbsent(from, key -> new ArrayList<>())
+                .add(ack);
+
+        System.out.println("ACK pendiente guardado para: " + from);
     }
 
     @Override
