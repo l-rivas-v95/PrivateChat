@@ -13,6 +13,9 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
     fun observeChatMessages(chatId: Long): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM chat_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
+    suspend fun getChatMessagesOnce(chatId: Long): List<MessageEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveChatMessage(entity: MessageEntity): Long
 }
