@@ -242,6 +242,14 @@ class MainActivity : ComponentActivity() {
                         saveContact(contact, newName, publicKey) { contacts = it }
                         sendKeyExchange(contact)
                     },
+                    onClearChat = {
+                        clearChatMessages(contact) {
+                            messages = messages.filterNot {
+                                (it.from == connectedUserId && it.to == contact) ||
+                                        (it.from == contact && it.to == connectedUserId)
+                            }
+                        }
+                    },
                     onSend = { text ->
                         if (storedContact?.publicKey.isNullOrBlank()) {
                             sendKeyExchange(contact)
@@ -384,6 +392,20 @@ class MainActivity : ComponentActivity() {
                     lastMessagePreview = message.text
                 )
             )
+        }
+    }
+
+    private fun clearChatMessages(contactUsername: String, onDone: () -> Unit) {
+        lifecycleScope.launch {
+            val chat = database.chatDao().findByContact(contactUsername) ?: return@launch
+            database.chatMessageDao().deleteMessagesByChatId(chat.id)
+            database.chatDao().save(
+                chat.copy(
+                    updatedAt = System.currentTimeMillis(),
+                    lastMessagePreview = "Sin mensajes todavía"
+                )
+            )
+            onDone()
         }
     }
 
