@@ -10,6 +10,8 @@ data class ContactEntity(
     val username: String,
     val displayName: String,
     val publicKey: String? = null,
+    val avatarBase64: String? = null,
+    val avatarUpdatedAt: Long? = null,
     val createdAt: Long,
     val lastSeenAt: Long? = null
 )
