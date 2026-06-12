@@ -30,7 +30,6 @@ import com.lrv.privatechat.data.entity.ContactEntity
 import com.lrv.privatechat.data.entity.MessageEntity
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -119,11 +118,6 @@ class MainActivity : ComponentActivity() {
 
             chatClient = ChatWebSocketClient(
                 onMessageReceived = { received ->
-                    if (received.startsWith("Usuario offline:")) {
-                        markLastSentMessageAsPending { reloadMessages() }
-                        return@ChatWebSocketClient
-                    }
-
                     val from = extractValue(received, "from")
                     val to = extractValue(received, "to")
                     val text = extractValue(received, "text")
@@ -146,9 +140,6 @@ class MainActivity : ComponentActivity() {
                 },
                 onStatusChanged = { newStatus ->
                     status = newStatus
-                    if (newStatus == "Conectado") {
-                        retryPendingMessages { reloadMessages() }
-                    }
                 }
             )
 
@@ -613,11 +604,7 @@ class MainActivity : ComponentActivity() {
                     )
                     Spacer(modifier = Modifier.height(3.dp))
                     Text(
-                        text = when {
-                            !message.mine -> message.from.take(8) + "..."
-                            message.status == "PENDING" -> "pendiente"
-                            else -> "enviado"
-                        },
+                        text = if (message.mine) "enviado" else message.from.take(8) + "...",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFF777777),
                         modifier = Modifier.align(Alignment.End)
@@ -845,35 +832,6 @@ class MainActivity : ComponentActivity() {
                     lastMessagePreview = message.text
                 )
             )
-        }
-    }
-
-    private fun markLastSentMessageAsPending(onDone: () -> Unit) {
-        lifecycleScope.launch {
-            val pendingCandidate = database.chatMessageDao()
-                .getPendingCandidateMessagesOnce()
-                .firstOrNull()
-
-            if (pendingCandidate != null) {
-                database.chatMessageDao().updateDeliveryStatus(pendingCandidate.id, "PENDING")
-            }
-
-            onDone()
-        }
-    }
-
-    private fun retryPendingMessages(onDone: () -> Unit) {
-        lifecycleScope.launch {
-            delay(500)
-            val pendingMessages = database.chatMessageDao().getPendingMessagesOnce()
-
-            pendingMessages.forEach { pending ->
-                val json = "{\"from\":\"${pending.senderUsername}\",\"to\":\"${pending.receiverUsername}\",\"text\":\"${pending.body}\"}"
-                chatClient.send(json)
-                database.chatMessageDao().updateDeliveryStatus(pending.id, "SENT")
-            }
-
-            onDone()
         }
     }
 
