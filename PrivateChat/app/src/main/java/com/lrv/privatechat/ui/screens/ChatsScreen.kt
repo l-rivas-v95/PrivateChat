@@ -1,7 +1,8 @@
 package com.lrv.privatechat.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,9 @@ import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.model.ChatItemUiModel
 import com.lrv.privatechat.model.UNKNOWN_CONTACT_NAME
 import com.lrv.privatechat.model.UiMessage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun ChatsScreen(
@@ -132,7 +136,6 @@ fun ChatsScreen(
                             (it.from == userId && it.to == contact.username) ||
                                     (it.from == contact.username && it.to == userId)
                         }
-                        ?.text ?: "Sin mensajes todavía"
 
                     val visibleName = if (contact.displayName == contact.username) {
                         UNKNOWN_CONTACT_NAME
@@ -141,7 +144,12 @@ fun ChatsScreen(
                     }
 
                     ChatListRow(
-                        chatItem = ChatItemUiModel(contact.username, visibleName, lastMessage),
+                        chatItem = ChatItemUiModel(
+                            username = contact.username,
+                            displayName = visibleName,
+                            lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
+                            timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: ""
+                        ),
                         appColor = appColor,
                         onClick = { onOpenChat(contact.username) }
                     )
@@ -151,6 +159,7 @@ fun ChatsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatListRow(
     chatItem: ChatItemUiModel,
@@ -161,7 +170,7 @@ private fun ChatListRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -190,7 +199,7 @@ private fun ChatListRow(
             )
             Spacer(modifier = Modifier.size(3.dp))
             Text(
-                text = chatItem.username.take(8) + "... · " + chatItem.lastMessage,
+                text = chatItem.lastMessage,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF666666),
                 maxLines = 1
@@ -198,9 +207,13 @@ private fun ChatListRow(
         }
 
         Text(
-            text = "ahora",
+            text = chatItem.timeText,
             style = MaterialTheme.typography.labelSmall,
             color = Color(0xFF777777)
         )
     }
+}
+
+private fun formatChatTime(timestamp: Long): String {
+    return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(timestamp))
 }
