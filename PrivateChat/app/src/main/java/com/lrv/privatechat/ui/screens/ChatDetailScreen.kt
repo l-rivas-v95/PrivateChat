@@ -48,6 +48,7 @@ fun ChatDetailScreen(
     messages: List<UiMessage>,
     onBack: () -> Unit,
     onSaveContact: (String, String?) -> Unit,
+    onClearChat: () -> Unit,
     onSend: (String) -> Unit
 ) {
     var message by remember { mutableStateOf("") }
@@ -110,6 +111,10 @@ fun ChatDetailScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
+                    }
+
+                    TextButton(onClick = onClearChat) {
+                        Text("Vaciar", color = Color.White)
                     }
                 }
 
