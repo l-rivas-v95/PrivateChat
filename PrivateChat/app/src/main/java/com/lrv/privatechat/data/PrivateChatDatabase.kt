@@ -17,7 +17,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
         ChatEntity::class,
         MessageEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class PrivateChatDatabase : RoomDatabase() {
@@ -36,7 +36,9 @@ abstract class PrivateChatDatabase : RoomDatabase() {
                     context.applicationContext,
                     PrivateChatDatabase::class.java,
                     "private_chat.db"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration(false)
+                    .build()
 
                 INSTANCE = instance
                 instance
