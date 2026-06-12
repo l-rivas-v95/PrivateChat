@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
         var localUserId by remember { mutableStateOf(initialUserId) }
         var connectedUserId by remember { mutableStateOf(localUserId) }
-        var displayName by remember { mutableStateOf(preferences.getString("display_name", "Luis") ?: "Luis") }
+        var displayName by remember { mutableStateOf(preferences.getString("display_name", "User") ?: "Luis") }
         var localAvatarBase64 by remember { mutableStateOf(preferences.getString("local_avatar_base64", null)) }
         var selectedColor by remember {
             mutableStateOf(
