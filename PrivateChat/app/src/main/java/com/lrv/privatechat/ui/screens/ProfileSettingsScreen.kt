@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -26,14 +28,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lrv.privatechat.model.AppColor
+import com.lrv.privatechat.ui.components.AvatarView
 
 @Composable
 fun ProfileSettingsScreen(
     userId: String,
     displayName: String,
     publicKey: String,
+    avatarBase64: String?,
     appColor: AppColor,
     onDisplayNameChange: (String) -> Unit,
+    onAvatarClick: () -> Unit,
     onColorChange: (AppColor) -> Unit,
     onBack: () -> Unit
 ) {
@@ -76,6 +81,39 @@ fun ProfileSettingsScreen(
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AvatarView(
+                            displayName = displayName,
+                            avatarBase64 = avatarBase64,
+                            appColor = appColor,
+                            size = 72.dp
+                        )
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Foto de perfil",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Se enviará a tus contactos.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = onAvatarClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+                            ) {
+                                Text("Cambiar foto", color = Color.White)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = displayName,
