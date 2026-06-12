@@ -9,6 +9,7 @@ data class ContactEntity(
     val id: Long = 0,
     val username: String,
     val displayName: String,
+    val publicKey: String? = null,
     val createdAt: Long,
     val lastSeenAt: Long? = null
 )
