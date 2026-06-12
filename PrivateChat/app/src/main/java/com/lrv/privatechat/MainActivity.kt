@@ -24,6 +24,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lrv.privatechat.crypto.KeyPairManager
 import com.lrv.privatechat.data.PrivateChatDatabase
 import com.lrv.privatechat.data.entity.ChatEntity
 import com.lrv.privatechat.data.entity.ContactEntity
@@ -68,10 +69,13 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var chatClient: ChatWebSocketClient
     private lateinit var database: PrivateChatDatabase
+    private lateinit var keyPairManager: KeyPairManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         database = PrivateChatDatabase.getInstance(this)
+        keyPairManager = KeyPairManager(this)
+        keyPairManager.getOrCreateKeyPair()
 
         setContent {
             PrivateChatTheme {
@@ -84,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private fun PrivateChatApp() {
         val navController = rememberNavController()
         val preferences = remember { getSharedPreferences("private_chat_settings", Context.MODE_PRIVATE) }
+        val localPublicKey = remember { keyPairManager.getPublicKeyText() }
         val initialUserId = remember {
             preferences.getString("local_user_id", null) ?: UUID.randomUUID().toString().also {
                 preferences.edit().putString("local_user_id", it).apply()
@@ -179,8 +184,8 @@ class MainActivity : ComponentActivity() {
             NewChatDialog(
                 appColor = selectedColor,
                 onDismiss = { showNewChatDialog = false },
-                onSaveManual = { contactId, contactName ->
-                    saveContact(contactId, contactName) { contacts = it }
+                onSaveManual = { contactId, contactName, publicKey ->
+                    saveContact(contactId, contactName, publicKey) { contacts = it }
                     showNewChatDialog = false
                 }
             )
@@ -232,8 +237,8 @@ class MainActivity : ComponentActivity() {
                                 (it.from == contact && it.to == connectedUserId)
                     },
                     onBack = { navController.popBackStack() },
-                    onSaveContact = { newName ->
-                        saveContact(contact, newName) { contacts = it }
+                    onSaveContact = { newName, publicKey ->
+                        saveContact(contact, newName, publicKey) { contacts = it }
                     },
                     onSend = { text ->
                         val messageId = UUID.randomUUID().toString()
@@ -260,6 +265,7 @@ class MainActivity : ComponentActivity() {
                 ProfileSettingsScreen(
                     userId = localUserId,
                     displayName = displayName,
+                    publicKey = localPublicKey,
                     appColor = selectedColor,
                     onDisplayNameChange = { newName ->
                         displayName = newName
@@ -452,10 +458,11 @@ class MainActivity : ComponentActivity() {
     private fun NewChatDialog(
         appColor: AppColor,
         onDismiss: () -> Unit,
-        onSaveManual: (String, String) -> Unit
+        onSaveManual: (String, String, String?) -> Unit
     ) {
         var contactId by remember { mutableStateOf("") }
         var contactName by remember { mutableStateOf("") }
+        var publicKey by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -463,7 +470,7 @@ class MainActivity : ComponentActivity() {
             text = {
                 Column {
                     Text(
-                        text = "Añade un contacto por ID manualmente. El escaneo QR se añadirá en el siguiente paso.",
+                        text = "Añade el ID y, si lo tienes, la clave pública del contacto.",
                         style = MaterialTheme.typography.bodySmall
                     )
 
@@ -485,6 +492,17 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = publicKey,
+                        onValueChange = { publicKey = it.trim() },
+                        label = { Text("Clave pública opcional") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Surface(
@@ -504,7 +522,7 @@ class MainActivity : ComponentActivity() {
                 Button(
                     onClick = {
                         if (contactId.isNotBlank()) {
-                            onSaveManual(contactId, contactName.ifBlank { contactId })
+                            onSaveManual(contactId, contactName.ifBlank { contactId }, publicKey.ifBlank { null })
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
@@ -525,9 +543,10 @@ class MainActivity : ComponentActivity() {
         appColor: AppColor,
         contactId: String,
         onDismiss: () -> Unit,
-        onSave: (String) -> Unit
+        onSave: (String, String?) -> Unit
     ) {
         var contactName by remember { mutableStateOf("") }
+        var publicKey by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -542,13 +561,22 @@ class MainActivity : ComponentActivity() {
                         label = { Text("Nombre") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = publicKey,
+                        onValueChange = { publicKey = it.trim() },
+                        label = { Text("Clave pública opcional") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (contactName.isNotBlank()) {
-                            onSave(contactName.trim())
+                            onSave(contactName.trim(), publicKey.ifBlank { null })
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
@@ -573,7 +601,7 @@ class MainActivity : ComponentActivity() {
         appColor: AppColor,
         messages: List<UiMessage>,
         onBack: () -> Unit,
-        onSaveContact: (String) -> Unit,
+        onSaveContact: (String, String?) -> Unit,
         onSend: (String) -> Unit
     ) {
         var message by remember { mutableStateOf("") }
@@ -584,8 +612,8 @@ class MainActivity : ComponentActivity() {
                 appColor = appColor,
                 contactId = contact,
                 onDismiss = { showSaveContactDialog = false },
-                onSave = { newName ->
-                    onSaveContact(newName)
+                onSave = { newName, publicKey ->
+                    onSaveContact(newName, publicKey)
                     showSaveContactDialog = false
                 }
             )
@@ -748,6 +776,7 @@ class MainActivity : ComponentActivity() {
     private fun ProfileSettingsScreen(
         userId: String,
         displayName: String,
+        publicKey: String,
         appColor: AppColor,
         onDisplayNameChange: (String) -> Unit,
         onColorChange: (AppColor) -> Unit,
@@ -816,6 +845,21 @@ class MainActivity : ComponentActivity() {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
+                        Text(
+                            text = "Mi clave pública",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        Text(
+                            text = publicKey,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF555555),
+                            maxLines = 5
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
                         Surface(
                             color = appColor.light,
                             shape = RoundedCornerShape(16.dp),
@@ -832,7 +876,7 @@ class MainActivity : ComponentActivity() {
                                         color = appColor.main
                                     )
                                     Text(
-                                        text = "Pendiente de generar",
+                                        text = "Pendiente: ID + clave pública",
                                         color = appColor.main
                                     )
                                 }
@@ -897,10 +941,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveUnknownContact(contactId: String, onLoaded: (List<ContactEntity>) -> Unit) {
-        saveContact(contactId, UNKNOWN_CONTACT_NAME, onLoaded)
+        saveContact(contactId, UNKNOWN_CONTACT_NAME, null, onLoaded)
     }
 
-    private fun saveContact(contactId: String, contactName: String, onLoaded: (List<ContactEntity>) -> Unit) {
+    private fun saveContact(contactId: String, contactName: String, publicKey: String?, onLoaded: (List<ContactEntity>) -> Unit) {
         lifecycleScope.launch {
             val now = System.currentTimeMillis()
             val existingContact = database.contactDao().findByUsername(contactId)
@@ -910,6 +954,7 @@ class MainActivity : ComponentActivity() {
                     id = existingContact?.id ?: 0,
                     username = contactId,
                     displayName = contactName,
+                    publicKey = publicKey ?: existingContact?.publicKey,
                     createdAt = existingContact?.createdAt ?: now,
                     lastSeenAt = existingContact?.lastSeenAt
                 )
