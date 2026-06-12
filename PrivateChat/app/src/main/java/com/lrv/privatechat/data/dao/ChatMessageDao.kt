@@ -16,6 +16,12 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
     suspend fun getChatMessagesOnce(chatId: Long): List<MessageEntity>
 
+    @Query("SELECT * FROM chat_messages WHERE deliveryStatus = 'PENDING' ORDER BY timestamp ASC")
+    suspend fun getPendingMessagesOnce(): List<MessageEntity>
+
+    @Query("UPDATE chat_messages SET deliveryStatus = :status WHERE id = :id")
+    suspend fun updateDeliveryStatus(id: Long, status: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveChatMessage(entity: MessageEntity): Long
 }
