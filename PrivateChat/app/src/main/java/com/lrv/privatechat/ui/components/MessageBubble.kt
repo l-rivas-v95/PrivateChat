@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.dp
 import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.model.MESSAGE_STATUS_DELIVERED
 import com.lrv.privatechat.model.UiMessage
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -84,11 +87,7 @@ fun MessageBubble(
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = when {
-                        !message.mine -> message.from.take(8) + "..."
-                        message.status == MESSAGE_STATUS_DELIVERED -> "entregado"
-                        else -> "enviado"
-                    },
+                    text = buildMessageFooter(message),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF777777),
                     modifier = Modifier.align(Alignment.End)
@@ -96,4 +95,15 @@ fun MessageBubble(
             }
         }
     }
+}
+
+private fun buildMessageFooter(message: UiMessage): String {
+    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
+
+    if (!message.mine) {
+        return time
+    }
+
+    val status = if (message.status == MESSAGE_STATUS_DELIVERED) "entregado" else "enviado"
+    return "$time · $status"
 }
