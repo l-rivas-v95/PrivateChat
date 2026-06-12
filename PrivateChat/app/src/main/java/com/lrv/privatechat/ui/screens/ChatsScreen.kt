@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +23,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,8 +53,34 @@ fun ChatsScreen(
     onToggleConnection: () -> Unit,
     onNewChat: () -> Unit,
     onOpenChat: (String) -> Unit,
+    onDeleteConversation: (String) -> Unit,
     onOpenProfile: () -> Unit
 ) {
+    var conversationToDelete by remember { mutableStateOf<ChatItemUiModel?>(null) }
+
+    if (conversationToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { conversationToDelete = null },
+            title = { Text("Borrar conversación") },
+            text = { Text("Se borrará esta conversación y sus mensajes solo en este dispositivo.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        conversationToDelete?.let { onDeleteConversation(it.username) }
+                        conversationToDelete = null
+                    }
+                ) {
+                    Text("Borrar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { conversationToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -143,15 +174,18 @@ fun ChatsScreen(
                         contact.displayName
                     }
 
+                    val chatItem = ChatItemUiModel(
+                        username = contact.username,
+                        displayName = visibleName,
+                        lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
+                        timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: ""
+                    )
+
                     ChatListRow(
-                        chatItem = ChatItemUiModel(
-                            username = contact.username,
-                            displayName = visibleName,
-                            lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
-                            timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: ""
-                        ),
+                        chatItem = chatItem,
                         appColor = appColor,
-                        onClick = { onOpenChat(contact.username) }
+                        onClick = { onOpenChat(contact.username) },
+                        onLongClick = { conversationToDelete = chatItem }
                     )
                 }
             }
@@ -164,13 +198,17 @@ fun ChatsScreen(
 private fun ChatListRow(
     chatItem: ChatItemUiModel,
     appColor: AppColor,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
-            .combinedClickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
