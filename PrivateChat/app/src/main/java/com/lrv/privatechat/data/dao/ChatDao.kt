@@ -13,6 +13,9 @@ interface ChatDao {
     @Query("SELECT * FROM chats ORDER BY updatedAt DESC")
     fun observeChats(): Flow<List<ChatEntity>>
 
+    @Query("SELECT * FROM chats ORDER BY updatedAt DESC")
+    suspend fun getAllChatsOnce(): List<ChatEntity>
+
     @Query("SELECT * FROM chats WHERE contactUsername = :contactUsername LIMIT 1")
     suspend fun findByContact(contactUsername: String): ChatEntity?
 
