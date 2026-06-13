@@ -1,5 +1,7 @@
 package com.lrv.privatechat.presentation
 
+import com.lrv.privatechat.data.entity.CONTACT_STATUS_ACCEPTED
+import com.lrv.privatechat.data.entity.CONTACT_STATUS_PENDING
 import com.lrv.privatechat.data.entity.ContactEntity
 import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.model.UiMessage
@@ -23,5 +25,12 @@ data class PrivateChatUiState(
     val visibleContacts: List<ContactEntity>
         get() = contacts
             .filter { it.username != connectedUserId }
+            .filter { it.status == CONTACT_STATUS_ACCEPTED }
+            .distinctBy { it.username }
+
+    val pendingContacts: List<ContactEntity>
+        get() = contacts
+            .filter { it.username != connectedUserId }
+            .filter { it.status == CONTACT_STATUS_PENDING }
             .distinctBy { it.username }
 }
