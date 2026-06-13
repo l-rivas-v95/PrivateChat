@@ -1,5 +1,6 @@
 package com.lrv.privatechat.network
 
+import com.lrv.privatechat.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
