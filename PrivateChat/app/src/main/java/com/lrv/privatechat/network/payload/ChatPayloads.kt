@@ -6,6 +6,8 @@ object ChatPayloadTypes {
     const val MESSAGE = "message"
     const val ACK = "ack"
     const val KEY_EXCHANGE = "key_exchange"
+    const val CONTACT_INVITE = "contact_invite"
+    const val CONTACT_ACCEPT = "contact_accept"
     const val PROFILE_AVATAR = "profile_avatar"
     const val PRIVATECHAT_CONTACT = "privatechat_contact"
 }
@@ -18,6 +20,26 @@ data class ContactQrPayload(
 
 object ChatPayloads {
 
+    fun contactInvite(from: String, to: String, displayName: String, publicKey: String): String {
+        return JSONObject()
+            .put("type", ChatPayloadTypes.CONTACT_INVITE)
+            .put("from", from)
+            .put("to", to)
+            .put("displayName", displayName)
+            .put("publicKey", publicKey)
+            .toString()
+    }
+
+    fun contactAccept(from: String, to: String, displayName: String, publicKey: String): String {
+        return JSONObject()
+            .put("type", ChatPayloadTypes.CONTACT_ACCEPT)
+            .put("from", from)
+            .put("to", to)
+            .put("displayName", displayName)
+            .put("publicKey", publicKey)
+            .toString()
+    }
+
     fun keyExchange(from: String, to: String, publicKey: String): String {
         return JSONObject()
             .put("type", ChatPayloadTypes.KEY_EXCHANGE)
@@ -27,13 +49,7 @@ object ChatPayloads {
             .toString()
     }
 
-    fun encryptedMessage(
-        messageId: String,
-        from: String,
-        to: String,
-        cipherText: String,
-        iv: String
-    ): String {
+    fun encryptedMessage(messageId: String, from: String, to: String, cipherText: String, iv: String): String {
         return JSONObject()
             .put("type", ChatPayloadTypes.MESSAGE)
             .put("id", messageId)
