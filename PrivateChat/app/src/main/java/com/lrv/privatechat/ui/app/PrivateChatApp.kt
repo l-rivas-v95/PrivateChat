@@ -52,11 +52,13 @@ fun PrivateChatApp(viewModel: PrivateChatViewModel = viewModel()) {
                 isConnected = uiState.isConnected,
                 appColor = uiState.selectedColor,
                 contacts = uiState.visibleContacts,
+                pendingContacts = uiState.pendingContacts,
                 messages = uiState.messages,
                 onToggleConnection = viewModel::toggleConnection,
                 onNewChat = viewModel::showNewChatDialog,
                 onOpenChat = { contact -> navController.navigate(PrivateChatRoutes.chatDetail(contact)) },
                 onDeleteConversation = viewModel::deleteConversation,
+                onAcceptContact = viewModel::acceptPendingContact,
                 onOpenProfile = { navController.navigate(PrivateChatRoutes.Profile.route) }
             )
         }
