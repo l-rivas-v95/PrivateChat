@@ -127,8 +127,8 @@ class MainActivity : ComponentActivity() {
             chatClient.send(buildProfileAvatarPayload(connectedUserId, contactUsername, avatarBase64))
         }
 
-        fun sendAvatarToContacts(avatarBase64: String) {
-            contacts
+        fun sendAvatarToContacts(avatarBase64: String, loadedContacts: List<ContactEntity> = contacts) {
+            loadedContacts
                 .filter { it.username != connectedUserId }
                 .distinctBy { it.username }
                 .forEach { contact -> sendAvatarToContact(contact.username, avatarBase64) }
@@ -138,7 +138,6 @@ class MainActivity : ComponentActivity() {
             connectedUserId = localUserId
             preferences.edit().putString("connected_user_id", localUserId).apply()
             chatClient.connect(localUserId)
-            localAvatarBase64?.let { sendAvatarToContacts(it) }
         }
 
         fun disconnect() {
@@ -172,6 +171,12 @@ class MainActivity : ComponentActivity() {
                     preferences.edit().putString("local_avatar_base64", encoded).apply()
                     if (status == "Conectado") sendAvatarToContacts(encoded)
                 }
+            }
+        }
+
+        LaunchedEffect(status, localAvatarBase64, contacts) {
+            if (status == "Conectado") {
+                localAvatarBase64?.let { sendAvatarToContacts(it) }
             }
         }
 
@@ -263,7 +268,10 @@ class MainActivity : ComponentActivity() {
                     navController.navigate("scan_qr")
                 },
                 onSaveManual = { contactId, contactName, publicKey ->
-                    saveContact(contactId, contactName, publicKey) { loaded -> updateContacts(loaded) }
+                    saveContact(contactId, contactName, publicKey) { loaded ->
+                        updateContacts(loaded)
+                        localAvatarBase64?.let { sendAvatarToContacts(it, loaded) }
+                    }
                     sendKeyExchange(contactId)
                     localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
                     scannedQrContent = null
@@ -326,7 +334,10 @@ class MainActivity : ComponentActivity() {
                     },
                     onBack = { navController.popBackStack() },
                     onSaveContact = { newName, publicKey ->
-                        saveContact(contact, newName, publicKey) { loaded -> updateContacts(loaded) }
+                        saveContact(contact, newName, publicKey) { loaded ->
+                            updateContacts(loaded)
+                            localAvatarBase64?.let { sendAvatarToContact(contact, it) }
+                        }
                         sendKeyExchange(contact)
                         localAvatarBase64?.let { sendAvatarToContact(contact, it) }
                     },
