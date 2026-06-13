@@ -14,40 +14,54 @@ class ChatWebSocketClient(
     private var webSocket: WebSocket? = null
 
     fun connect(username: String) {
-        disconnect()
+        val previousSocket = webSocket
+        webSocket = null
+        previousSocket?.close(1000, "Cierre normal")
 
         val request = Request.Builder()
             .url("ws://10.0.2.2:8080/chat?user=$username")
             .build()
 
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+        val nextSocket = client.newWebSocket(request, object : WebSocketListener() {
 
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                onStatusChanged("Conectado")
+                if (this@ChatWebSocketClient.webSocket == webSocket) {
+                    onStatusChanged("Conectado")
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                onMessageReceived(text)
+                if (this@ChatWebSocketClient.webSocket == webSocket) {
+                    onMessageReceived(text)
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                this@ChatWebSocketClient.webSocket = null
-                onStatusChanged("Error: ${t.message}")
+                if (this@ChatWebSocketClient.webSocket == webSocket) {
+                    this@ChatWebSocketClient.webSocket = null
+                    onStatusChanged("Error: ${t.message}")
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                this@ChatWebSocketClient.webSocket = null
-                onStatusChanged("Desconectado")
+                if (this@ChatWebSocketClient.webSocket == webSocket) {
+                    this@ChatWebSocketClient.webSocket = null
+                    onStatusChanged("Desconectado")
+                }
             }
         })
+
+        webSocket = nextSocket
     }
 
-    fun send(message: String) {
-        webSocket?.send(message)
+    fun send(message: String): Boolean {
+        return webSocket?.send(message) == true
     }
 
     fun disconnect() {
-        webSocket?.close(1000, "Cierre normal")
+        val currentSocket = webSocket
         webSocket = null
+        currentSocket?.close(1000, "Cierre normal")
+        onStatusChanged("Desconectado")
     }
 }
