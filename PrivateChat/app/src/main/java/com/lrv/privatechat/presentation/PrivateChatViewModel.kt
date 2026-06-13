@@ -91,10 +91,19 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     fun onQrScanned(qrContent: String) { _uiState.update { it.copy(scannedQrContent = qrContent, showNewChatDialog = true) } }
     fun reopenNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = true) } }
 
+    fun markChatAsRead(contactUsername: String) {
+        viewModelScope.launch {
+            val chat = database.chatDao().findByContact(contactUsername) ?: return@launch
+            database.chatMessageDao().markIncomingMessagesAsRead(chat.id)
+            reloadUnreadCounts()
+        }
+    }
+
     fun saveManualContact(contactId: String, contactName: String, publicKey: String?) {
         viewModelScope.launch {
             saveContactInternal(contactId, contactName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
             sendContactInvite(contactId)
             sendLocalAvatarToContact(contactId)
             _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) }
@@ -105,6 +114,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(contactId, contactName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
             sendContactInvite(contactId)
             sendLocalAvatarToContact(contactId)
         }
@@ -115,6 +125,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             val existing = database.contactDao().findByUsername(contactUsername) ?: return@launch
             saveContactInternal(existing.username, existing.displayName, existing.publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
             sendContactAccept(contactUsername)
             sendLocalAvatarToContact(contactUsername)
         }
@@ -133,7 +144,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                     messages = state.messages.filterNot {
                         (it.from == state.connectedUserId && it.to == contactUsername) ||
                             (it.from == contactUsername && it.to == state.connectedUserId)
-                    }
+                    },
+                    unreadCounts = state.unreadCounts - contactUsername
                 )
             }
         }
@@ -145,10 +157,13 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             database.chatMessageDao().deleteMessagesByChatId(chat.id)
             database.chatDao().save(chat.copy(updatedAt = System.currentTimeMillis(), lastMessagePreview = "Sin mensajes todavía"))
             _uiState.update { state ->
-                state.copy(messages = state.messages.filterNot {
-                    (it.from == state.connectedUserId && it.to == contactUsername) ||
-                        (it.from == contactUsername && it.to == state.connectedUserId)
-                })
+                state.copy(
+                    messages = state.messages.filterNot {
+                        (it.from == state.connectedUserId && it.to == contactUsername) ||
+                            (it.from == contactUsername && it.to == state.connectedUserId)
+                    },
+                    unreadCounts = state.unreadCounts - contactUsername
+                )
             }
         }
     }
@@ -157,6 +172,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             database.chatMessageDao().deleteMessageByMessageId(message.id)
             _uiState.update { state -> state.copy(messages = state.messages.filterNot { it.id == message.id }) }
+            reloadUnreadCounts()
         }
     }
 
@@ -180,9 +196,10 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             saveContactInternal(contactUsername, storedContact.displayName, storedContact.publicKey, CONTACT_STATUS_ACCEPTED)
-            saveMessageToDatabaseInternal(uiMessage, contactUsername, MESSAGE_STATUS_SENT)
+            saveMessageToDatabaseInternal(uiMessage, contactUsername, MESSAGE_STATUS_SENT, isRead = true)
             updateContacts(database.contactDao().getContactsOnce())
             reloadMessages()
+            reloadUnreadCounts()
         }
     }
 
@@ -239,6 +256,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(from, displayName, publicKey, CONTACT_STATUS_PENDING)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
         }
     }
 
@@ -250,6 +268,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(from, displayName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
             sendLocalAvatarToContact(from)
         }
     }
@@ -261,6 +280,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(from, UNKNOWN_CONTACT_NAME, publicKey, CONTACT_STATUS_PENDING)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
         }
     }
 
@@ -272,6 +292,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactAvatarInternal(from, avatarBase64, updatedAt)
             updateContacts(database.contactDao().getContactsOnce())
+            reloadUnreadCounts()
         }
     }
 
@@ -286,15 +307,17 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
             if (text.isBlank() || text == ChatCryptoService.DECRYPTION_ERROR_TEXT) {
                 updateContacts(loadedContacts)
+                reloadUnreadCounts()
                 return@launch
             }
 
             val contact = saveContactInternal(from, UNKNOWN_CONTACT_NAME, null, CONTACT_STATUS_PENDING)
             val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
             _uiState.update { it.copy(messages = it.messages + uiMessage) }
-            saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
+            saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED, isRead = false)
             updateContacts(database.contactDao().getContactsOnce())
             reloadMessages()
+            reloadUnreadCounts()
             notificationHelper.showMessageNotification(contact.displayName, text)
         }
     }
@@ -308,10 +331,20 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             updateContacts(database.contactDao().getContactsOnce())
             reloadMessages()
+            reloadUnreadCounts()
         }
     }
 
     private suspend fun reloadMessages() { _uiState.update { it.copy(messages = loadMessagesFromDatabaseInternal()) } }
+
+    private suspend fun reloadUnreadCounts() {
+        val chats = database.chatDao().getAllChatsOnce()
+        val counts = chats.associate { chat ->
+            chat.contactUsername to database.chatMessageDao().countUnreadIncomingMessages(chat.id)
+        }.filterValues { it > 0 }
+        _uiState.update { it.copy(unreadCounts = counts) }
+    }
+
     private fun updateContacts(loaded: List<ContactEntity>) { _uiState.update { it.copy(contacts = normalizeContacts(loaded)) } }
 
     private fun normalizeContacts(loaded: List<ContactEntity>): List<ContactEntity> {
@@ -425,7 +458,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         return loadedMessages.sortedBy { it.timestamp }
     }
 
-    private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String) {
+    private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String, isRead: Boolean) {
         val chat = ensureChat(contactUsername)
         database.chatMessageDao().saveChatMessage(
             MessageEntity(
@@ -436,7 +469,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                 body = message.text,
                 timestamp = message.timestamp,
                 isMine = message.mine,
-                deliveryStatus = status
+                deliveryStatus = status,
+                isRead = isRead
             )
         )
         database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))
