@@ -22,6 +22,7 @@ import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.network.payload.ChatPayloadTypes
 import com.lrv.privatechat.network.payload.ChatPayloads
 import com.lrv.privatechat.notifications.ChatNotificationHelper
+import com.lrv.privatechat.realtime.ChatRealtimeManager
 import com.lrv.privatechat.util.ImageBase64Encoder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +38,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private val chatCryptoService: ChatCryptoService
     private val imageBase64Encoder = ImageBase64Encoder(application)
     private val notificationHelper = ChatNotificationHelper(application)
+    private val realtimeManager = ChatRealtimeManager.getInstance(application)
 
     private val chatClient = ChatWebSocketClient(
         onMessageReceived = ::handleIncomingPayload,
@@ -68,19 +70,33 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         chatCryptoService = ChatCryptoService(keyPairManager)
         notificationHelper.createChannels()
         _uiState.update { it.copy(localPublicKey = keyPairManager.getPublicKeyText()) }
+        observeRealtimeEvents()
         reloadLocalState()
         connect()
+    }
+
+    private fun observeRealtimeEvents() {
+        viewModelScope.launch {
+            realtimeManager.events.collect {
+                reloadLocalState()
+            }
+        }
+        viewModelScope.launch {
+            realtimeManager.status.collect { nextStatus ->
+                _uiState.update { it.copy(status = nextStatus) }
+            }
+        }
     }
 
     fun connect() {
         val localUserId = _uiState.value.localUserId
         preferences.edit().putString("connected_user_id", localUserId).apply()
         _uiState.update { it.copy(connectedUserId = localUserId) }
-        chatClient.connect(localUserId)
+        realtimeManager.connect(localUserId)
     }
 
     fun disconnect() {
-        chatClient.disconnect()
+        realtimeManager.disconnect()
         _uiState.update { it.copy(status = "Desconectado") }
     }
 
@@ -189,7 +205,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         val messageId = UUID.randomUUID().toString()
         val payload = chatCryptoService.buildOutgoingPayload(messageId, state.connectedUserId, contactUsername, text, storedContact)
-        chatClient.send(payload)
+        realtimeManager.send(payload)
 
         val uiMessage = UiMessage(messageId, state.connectedUserId, contactUsername, text, mine = true, status = MESSAGE_STATUS_SENT)
         _uiState.update { it.copy(messages = it.messages + uiMessage) }
@@ -348,6 +364,11 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private fun updateContacts(loaded: List<ContactEntity>) { _uiState.update { it.copy(contacts = normalizeContacts(loaded)) } }
 
     private fun normalizeContacts(loaded: List<ContactEntity>): List<ContactEntity> {
+        val latestActivityByContact = _uiState.value.messages
+            .flatMap { message -> listOf(message.from to message.timestamp, message.to to message.timestamp) }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, timestamps) -> timestamps.maxOrNull() ?: 0L }
+
         return loaded
             .groupBy { it.username }
             .map { (_, items) ->
@@ -356,41 +377,29 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                         .thenBy { it.displayName != UNKNOWN_CONTACT_NAME && it.displayName != it.username }
                         .thenBy { it.publicKey != null }
                         .thenBy { it.avatarBase64 != null }
-                        .thenBy { it.lastSeenAt ?: 0L }
+                        .thenBy { latestActivityByContact[it.username] ?: it.lastSeenAt ?: 0L }
                         .thenBy { it.createdAt }
                 )
             }
-            .sortedByDescending { it.lastSeenAt ?: it.createdAt }
+            .sortedByDescending { contact -> latestActivityByContact[contact.username] ?: contact.lastSeenAt ?: contact.createdAt }
     }
 
     private fun sendContactInvite(to: String) {
         val state = _uiState.value
-        chatClient.send(ChatPayloads.contactInvite(state.connectedUserId, to, state.displayName, state.localPublicKey))
+        realtimeManager.sendContactInvite(to, state.displayName, state.localPublicKey)
     }
 
     private fun sendContactAccept(to: String) {
         val state = _uiState.value
-        chatClient.send(ChatPayloads.contactAccept(state.connectedUserId, to, state.displayName, state.localPublicKey))
+        realtimeManager.sendContactAccept(to, state.displayName, state.localPublicKey)
     }
 
     private fun sendLocalAvatarToContact(contactUsername: String) {
-        _uiState.value.localAvatarBase64?.let { avatarBase64 ->
-            if (avatarBase64.length <= ImageBase64Encoder.MAX_AVATAR_BASE64_CHARS) {
-                chatClient.send(ChatPayloads.profileAvatar(_uiState.value.connectedUserId, contactUsername, avatarBase64, System.currentTimeMillis()))
-            }
-        }
+        realtimeManager.sendLocalAvatarToContact(contactUsername)
     }
 
     private fun sendLocalAvatarToAcceptedContacts(avatarBase64: String) {
-        if (avatarBase64.length > ImageBase64Encoder.MAX_AVATAR_BASE64_CHARS) return
-
-        _uiState.value.contacts
-            .filter { it.username != _uiState.value.connectedUserId }
-            .filter { it.status == CONTACT_STATUS_ACCEPTED }
-            .distinctBy { it.username }
-            .forEach { contact ->
-                chatClient.send(ChatPayloads.profileAvatar(_uiState.value.connectedUserId, contact.username, avatarBase64, System.currentTimeMillis()))
-            }
+        realtimeManager.sendLocalAvatarToAcceptedContacts(avatarBase64)
     }
 
     private suspend fun saveContactInternal(contactId: String, contactName: String, publicKey: String?, status: String): ContactEntity {
@@ -487,6 +496,5 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
     override fun onCleared() {
         super.onCleared()
-        chatClient.disconnect()
     }
 }
