@@ -120,18 +120,6 @@ fun ChatsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(
-                        onClick = onToggleConnection,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                    ) {
-                        Text(
-                            text = if (isConnected) "Desconectar" else "Conectar",
-                            color = appColor.main
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Button(
                         onClick = onNewChat,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White)
                     ) {
