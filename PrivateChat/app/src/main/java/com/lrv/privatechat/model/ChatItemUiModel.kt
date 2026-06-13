@@ -6,5 +6,8 @@ data class ChatItemUiModel(
     val lastMessage: String,
     val timeText: String,
     val avatarBase64: String? = null,
-    val hasUnreadMessages: Boolean = false
-)
+    val unreadCount: Int = 0
+) {
+    val hasUnreadMessages: Boolean
+        get() = unreadCount > 0
+}
