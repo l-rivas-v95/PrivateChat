@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -139,15 +140,16 @@ fun ChatDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = if (isUnknownContact) 104.dp else 62.dp, bottom = 70.dp)
+                .padding(top = if (isUnknownContact) 104.dp else 62.dp)
         ) {
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color(0xFFECE5DD))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 86.dp)
             ) {
                 items(messages) { msg ->
                     MessageBubble(
@@ -283,9 +285,10 @@ private fun MessageInputBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .imePadding()
+            .navigationBarsPadding()
             .background(Color(0xFFECE5DD))
-            .padding(8.dp)
-            .imePadding(),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
