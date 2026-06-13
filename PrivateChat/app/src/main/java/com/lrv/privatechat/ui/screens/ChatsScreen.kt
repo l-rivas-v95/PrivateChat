@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -72,14 +73,10 @@ fun ChatsScreen(
                         conversationToDelete?.let { onDeleteConversation(it.username) }
                         conversationToDelete = null
                     }
-                ) {
-                    Text("Borrar")
-                }
+                ) { Text("Borrar") }
             },
             dismissButton = {
-                TextButton(onClick = { conversationToDelete = null }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { conversationToDelete = null }) { Text("Cancelar") }
             }
         )
     }
@@ -111,9 +108,7 @@ fun ChatsScreen(
                         )
                     }
 
-                    TextButton(onClick = onOpenProfile) {
-                        Text("Perfil", color = Color.White)
-                    }
+                    TextButton(onClick = onOpenProfile) { Text("Perfil", color = Color.White) }
                 }
 
                 Row(
@@ -125,9 +120,7 @@ fun ChatsScreen(
                     Button(
                         onClick = onNewChat,
                         colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                    ) {
-                        Text("+ Nuevo chat", color = appColor.main)
-                    }
+                    ) { Text("+ Nuevo chat", color = appColor.main) }
                 }
             }
         }
@@ -164,15 +157,15 @@ fun ChatsScreen(
                             (it.from == userId && it.to == contact.username) ||
                                 (it.from == contact.username && it.to == userId)
                         }
-
+                        val hasUnreadMessages = lastMessage?.mine == false
                         val visibleName = if (contact.displayName == contact.username) UNKNOWN_CONTACT_NAME else contact.displayName
-
                         val chatItem = ChatItemUiModel(
                             username = contact.username,
                             displayName = visibleName,
                             lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
                             timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: "",
-                            avatarBase64 = contact.avatarBase64
+                            avatarBase64 = contact.avatarBase64,
+                            hasUnreadMessages = hasUnreadMessages
                         )
 
                         ChatListRow(
@@ -223,9 +216,7 @@ private fun PendingContactRow(
                 appColor = appColor,
                 size = 48.dp
             )
-
             Spacer(modifier = Modifier.width(12.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = contact.displayName.ifBlank { UNKNOWN_CONTACT_NAME },
@@ -239,16 +230,11 @@ private fun PendingContactRow(
                     color = Color(0xFF555555)
                 )
             }
-
-            TextButton(onClick = onDelete) {
-                Text("Rechazar", color = Color(0xFF777777))
-            }
+            TextButton(onClick = onDelete) { Text("Rechazar", color = Color(0xFF777777)) }
             Button(
                 onClick = onAccept,
                 colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
-            ) {
-                Text("Aceptar", color = Color.White)
-            }
+            ) { Text("Aceptar", color = Color.White) }
         }
     }
 }
@@ -265,10 +251,7 @@ private fun ChatListRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -278,30 +261,38 @@ private fun ChatListRow(
             appColor = appColor,
             size = 52.dp
         )
-
         Spacer(modifier = Modifier.width(14.dp))
-
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = chatItem.displayName,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = if (chatItem.hasUnreadMessages) FontWeight.Bold else FontWeight.SemiBold,
                 color = Color(0xFF111111)
             )
             Spacer(modifier = Modifier.size(3.dp))
             Text(
                 text = chatItem.lastMessage,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF666666),
+                fontWeight = if (chatItem.hasUnreadMessages) FontWeight.Bold else FontWeight.Normal,
+                color = if (chatItem.hasUnreadMessages) Color(0xFF111111) else Color(0xFF666666),
                 maxLines = 1
             )
         }
-
-        Text(
-            text = chatItem.timeText,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF777777)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = chatItem.timeText,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF777777)
+            )
+            if (chatItem.hasUnreadMessages) {
+                Spacer(modifier = Modifier.size(6.dp))
+                Surface(
+                    color = Color(0xFFE53935),
+                    shape = CircleShape,
+                    modifier = Modifier.size(10.dp)
+                ) {}
+            }
+        }
     }
 }
 
