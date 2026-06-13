@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.lrv.privatechat.model.AppColor
+import com.lrv.privatechat.network.payload.ChatPayloads
 
 @Composable
 fun NewChatDialog(
@@ -37,7 +38,7 @@ fun NewChatDialog(
     var importedQr by remember { mutableStateOf<String?>(null) }
 
     if (!scannedQrContent.isNullOrBlank() && scannedQrContent != importedQr) {
-        parseContactQr(scannedQrContent)?.let { contact ->
+        ChatPayloads.parseContactQr(scannedQrContent)?.let { contact ->
             contactId = contact.userId
             contactName = contact.displayName
             publicKey = contact.publicKey
@@ -127,43 +128,4 @@ fun NewChatDialog(
             }
         }
     )
-}
-
-private data class ContactQrData(
-    val userId: String,
-    val displayName: String,
-    val publicKey: String
-)
-
-private fun parseContactQr(content: String): ContactQrData? {
-    val type = extractValue(content, "type")
-    if (type != "privatechat_contact") return null
-
-    val userId = extractValue(content, "userId")
-    val displayName = extractValue(content, "displayName")
-    val publicKey = extractValue(content, "publicKey")
-
-    if (userId.isBlank()) return null
-
-    return ContactQrData(
-        userId = userId,
-        displayName = displayName.ifBlank { userId },
-        publicKey = publicKey
-    )
-}
-
-private fun extractValue(json: String, key: String): String {
-    val search = "\"$key\":\""
-    val start = json.indexOf(search)
-    if (start == -1) return ""
-
-    val valueStart = start + search.length
-    val end = json.indexOf("\"", valueStart)
-    if (end == -1) return ""
-
-    return json.substring(valueStart, end)
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
-        .replace("\\\"", "\"")
-        .replace("\\\\", "\\")
 }
