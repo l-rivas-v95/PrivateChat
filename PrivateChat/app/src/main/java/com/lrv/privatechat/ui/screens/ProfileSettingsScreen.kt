@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.ui.components.AvatarView
+import com.lrv.privatechat.ui.components.QrCodeView
 
 @Composable
 fun ProfileSettingsScreen(
@@ -42,6 +43,12 @@ fun ProfileSettingsScreen(
     onColorChange: (AppColor) -> Unit,
     onBack: () -> Unit
 ) {
+    val contactQrContent = buildContactQrContent(
+        userId = userId,
+        displayName = displayName,
+        publicKey = publicKey
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -156,20 +163,25 @@ fun ProfileSettingsScreen(
                     Surface(
                         color = appColor.light,
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "QR",
-                                    style = MaterialTheme.typography.headlineMedium,
+                                    text = "Mi QR de contacto",
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = appColor.main
                                 )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                QrCodeView(content = contactQrContent, size = 180.dp)
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = "Pendiente: ID + clave pública",
+                                    text = "Incluye tu ID, nombre y clave pública.",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = appColor.main
                                 )
                             }
@@ -225,4 +237,18 @@ fun ProfileSettingsScreen(
             }
         }
     }
+}
+
+private fun buildContactQrContent(userId: String, displayName: String, publicKey: String): String {
+    return """
+        {"type":"privatechat_contact","userId":"${escapeJson(userId)}","displayName":"${escapeJson(displayName)}","publicKey":"${escapeJson(publicKey)}"}
+    """.trimIndent()
+}
+
+private fun escapeJson(value: String): String {
+    return value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
 }
