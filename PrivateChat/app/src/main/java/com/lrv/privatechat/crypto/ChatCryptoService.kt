@@ -7,6 +7,10 @@ class ChatCryptoService(
     private val keyPairManager: KeyPairManager
 ) {
 
+    companion object {
+        const val DECRYPTION_ERROR_TEXT = "[No se pudo descifrar]"
+    }
+
     fun buildKeyExchangePayload(from: String, to: String): String {
         return ChatPayloads.keyExchange(
             from = from,
@@ -55,16 +59,14 @@ class ChatCryptoService(
         contacts: List<ContactEntity>
     ): String {
         val text = ChatPayloads.value(payload, "text")
-        if (text.isNotBlank()) {
-            return text
-        }
+        if (text.isNotBlank()) return text
 
         val cipherText = ChatPayloads.value(payload, "cipherText")
         val iv = ChatPayloads.value(payload, "iv")
         val contactPublicKey = contacts.firstOrNull { it.username == from }?.publicKey
 
         if (cipherText.isBlank() || iv.isBlank() || contactPublicKey.isNullOrBlank()) {
-            return "[No se pudo descifrar]"
+            return DECRYPTION_ERROR_TEXT
         }
 
         return try {
@@ -72,7 +74,7 @@ class ChatCryptoService(
             val remotePublicKey = keyPairManager.decodePublicKey(contactPublicKey)
             CryptoUtils.decrypt(cipherText, iv, localPrivateKey, remotePublicKey)
         } catch (_: Exception) {
-            "[No se pudo descifrar]"
+            DECRYPTION_ERROR_TEXT
         }
     }
 
