@@ -13,6 +13,7 @@ import com.lrv.privatechat.service.ChatForegroundService
 import com.lrv.privatechat.ui.app.PrivateChatApp
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
 import com.lrv.privatechat.util.AppVisibilityTracker
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
 
@@ -51,8 +52,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startChatForegroundService() {
+        val userId = getSharedPreferences("private_chat_settings", MODE_PRIVATE)
+            .getString("local_user_id", null)
+            ?: UUID.randomUUID().toString().also { generated ->
+                getSharedPreferences("private_chat_settings", MODE_PRIVATE)
+                    .edit()
+                    .putString("local_user_id", generated)
+                    .apply()
+            }
+
         val intent = Intent(this, ChatForegroundService::class.java).apply {
             action = ChatForegroundService.ACTION_START
+            putExtra(ChatForegroundService.EXTRA_USER_ID, userId)
         }
         ContextCompat.startForegroundService(this, intent)
     }
