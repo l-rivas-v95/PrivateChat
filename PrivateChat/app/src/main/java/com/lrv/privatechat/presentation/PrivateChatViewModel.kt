@@ -108,9 +108,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             saveContactInternal(contactId, contactName, publicKey)
             val loadedContacts = database.contactDao().getContactsOnce()
             updateContacts(loadedContacts)
+            sendContactInvite(contactId)
             _uiState.value.localAvatarBase64?.let { sendAvatarToContacts(it, loadedContacts) }
-            sendKeyExchange(contactId)
-            _uiState.value.localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
             _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) }
         }
     }
@@ -119,8 +118,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(contactId, contactName, publicKey)
             updateContacts(database.contactDao().getContactsOnce())
-            _uiState.value.localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
-            sendKeyExchange(contactId)
+            sendContactInvite(contactId)
             _uiState.value.localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
         }
     }
@@ -172,8 +170,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         val storedContact = state.contacts.firstOrNull { it.username == contactUsername }
 
         if (storedContact?.publicKey.isNullOrBlank()) {
-            sendKeyExchange(contactUsername)
-            addSystemMessage(contactUsername, "Intercambio de claves iniciado. Espera a que el contacto responda antes de enviar mensajes.")
+            sendContactInvite(contactUsername)
+            addSystemMessage(contactUsername, "Invitación enviada. Espera a que el contacto responda antes de enviar mensajes cifrados.")
             reloadLocalState()
             return
         }
@@ -182,15 +180,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         val payload = chatCryptoService.buildOutgoingPayload(messageId, state.connectedUserId, contactUsername, text, storedContact)
         chatClient.send(payload)
 
-        val uiMessage = UiMessage(
-            id = messageId,
-            from = state.connectedUserId,
-            to = contactUsername,
-            text = text,
-            mine = true,
-            status = MESSAGE_STATUS_SENT
-        )
-
+        val uiMessage = UiMessage(messageId, state.connectedUserId, contactUsername, text, mine = true, status = MESSAGE_STATUS_SENT)
         _uiState.update { it.copy(messages = it.messages + uiMessage) }
 
         viewModelScope.launch {
@@ -224,61 +214,92 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         val from = ChatPayloads.value(received, "from")
 
         when (type) {
-            ChatPayloadTypes.ACK -> {
-                val messageId = ChatPayloads.value(received, "messageId")
-                if (messageId.isNotBlank()) {
-                    _uiState.update { state ->
-                        state.copy(messages = state.messages.map { message -> if (message.id == messageId) message.copy(status = MESSAGE_STATUS_DELIVERED) else message })
-                    }
-                    viewModelScope.launch {
-                        database.chatMessageDao().updateDeliveryStatusByMessageId(messageId, MESSAGE_STATUS_DELIVERED)
-                        reloadMessages()
-                    }
-                }
-                return
-            }
-
-            ChatPayloadTypes.KEY_EXCHANGE -> {
-                val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
-                if (from.isNotBlank() && publicKey.isNotBlank()) {
-                    viewModelScope.launch {
-                        saveContactInternal(from, UNKNOWN_CONTACT_NAME, publicKey)
-                        updateContacts(database.contactDao().getContactsOnce())
-                        sendKeyExchange(from)
-                        _uiState.value.localAvatarBase64?.let { sendAvatarToContact(from, it) }
-                    }
-                }
-                return
-            }
-
-            ChatPayloadTypes.PROFILE_AVATAR -> {
-                val avatarBase64 = ChatPayloads.value(received, "avatarBase64")
-                val updatedAt = ChatPayloads.value(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
-                if (from.isNotBlank() && avatarBase64.isNotBlank()) {
-                    viewModelScope.launch {
-                        saveContactAvatarInternal(from, avatarBase64, updatedAt)
-                        updateContacts(database.contactDao().getContactsOnce())
-                    }
-                }
-                return
-            }
+            ChatPayloadTypes.ACK -> handleAck(received)
+            ChatPayloadTypes.CONTACT_INVITE -> handleContactInvite(received, from)
+            ChatPayloadTypes.CONTACT_ACCEPT -> handleContactAccept(received, from)
+            ChatPayloadTypes.KEY_EXCHANGE -> handleLegacyKeyExchange(received, from)
+            ChatPayloadTypes.PROFILE_AVATAR -> handleProfileAvatar(received, from)
+            else -> handleChatMessage(received, from)
         }
+    }
 
+    private fun handleAck(received: String) {
+        val messageId = ChatPayloads.value(received, "messageId")
+        if (messageId.isBlank()) return
+
+        _uiState.update { state ->
+            state.copy(messages = state.messages.map { message -> if (message.id == messageId) message.copy(status = MESSAGE_STATUS_DELIVERED) else message })
+        }
+        viewModelScope.launch {
+            database.chatMessageDao().updateDeliveryStatusByMessageId(messageId, MESSAGE_STATUS_DELIVERED)
+            reloadMessages()
+        }
+    }
+
+    private fun handleContactInvite(received: String, from: String) {
+        val publicKey = ChatPayloads.value(received, "publicKey")
+        val displayName = ChatPayloads.value(received, "displayName").ifBlank { UNKNOWN_CONTACT_NAME }
+        if (from.isBlank() || publicKey.isBlank()) return
+
+        viewModelScope.launch {
+            saveContactInternal(from, displayName, publicKey)
+            updateContacts(database.contactDao().getContactsOnce())
+            sendContactAccept(from)
+            _uiState.value.localAvatarBase64?.let { sendAvatarToContact(from, it) }
+        }
+    }
+
+    private fun handleContactAccept(received: String, from: String) {
+        val publicKey = ChatPayloads.value(received, "publicKey")
+        val displayName = ChatPayloads.value(received, "displayName").ifBlank { UNKNOWN_CONTACT_NAME }
+        if (from.isBlank() || publicKey.isBlank()) return
+
+        viewModelScope.launch {
+            saveContactInternal(from, displayName, publicKey)
+            updateContacts(database.contactDao().getContactsOnce())
+            _uiState.value.localAvatarBase64?.let { sendAvatarToContact(from, it) }
+        }
+    }
+
+    private fun handleLegacyKeyExchange(received: String, from: String) {
+        val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
+        if (from.isBlank() || publicKey.isBlank()) return
+
+        viewModelScope.launch {
+            saveContactInternal(from, UNKNOWN_CONTACT_NAME, publicKey)
+            updateContacts(database.contactDao().getContactsOnce())
+            sendContactAccept(from)
+            _uiState.value.localAvatarBase64?.let { sendAvatarToContact(from, it) }
+        }
+    }
+
+    private fun handleProfileAvatar(received: String, from: String) {
+        val avatarBase64 = ChatPayloads.value(received, "avatarBase64")
+        val updatedAt = ChatPayloads.value(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
+        if (from.isBlank() || avatarBase64.isBlank()) return
+
+        viewModelScope.launch {
+            saveContactAvatarInternal(from, avatarBase64, updatedAt)
+            updateContacts(database.contactDao().getContactsOnce())
+        }
+    }
+
+    private fun handleChatMessage(received: String, from: String) {
         val state = _uiState.value
         val to = ChatPayloads.value(received, "to")
         val text = chatCryptoService.readPlainTextFromPayload(received, from, state.contacts)
         val messageId = ChatPayloads.value(received, "id").ifBlank { UUID.randomUUID().toString() }
 
-        if (from.isNotBlank() && text.isNotBlank()) {
-            val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
-            _uiState.update { it.copy(messages = it.messages + uiMessage) }
+        if (from.isBlank() || text.isBlank()) return
 
-            viewModelScope.launch {
-                saveContactInternal(from, UNKNOWN_CONTACT_NAME, null)
-                saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
-                updateContacts(database.contactDao().getContactsOnce())
-                reloadMessages()
-            }
+        val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
+        _uiState.update { it.copy(messages = it.messages + uiMessage) }
+
+        viewModelScope.launch {
+            saveContactInternal(from, UNKNOWN_CONTACT_NAME, null)
+            saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
+            updateContacts(database.contactDao().getContactsOnce())
+            reloadMessages()
         }
     }
 
@@ -319,8 +340,14 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             .sortedByDescending { it.lastSeenAt ?: it.createdAt }
     }
 
-    private fun sendKeyExchange(to: String) {
-        chatClient.send(chatCryptoService.buildKeyExchangePayload(_uiState.value.connectedUserId, to))
+    private fun sendContactInvite(to: String) {
+        val state = _uiState.value
+        chatClient.send(ChatPayloads.contactInvite(state.connectedUserId, to, state.displayName, state.localPublicKey))
+    }
+
+    private fun sendContactAccept(to: String) {
+        val state = _uiState.value
+        chatClient.send(ChatPayloads.contactAccept(state.connectedUserId, to, state.displayName, state.localPublicKey))
     }
 
     private fun sendAvatarToContact(contactUsername: String, avatarBase64: String) {
@@ -397,7 +424,6 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         database.chatMessageDao().saveChatMessage(
             MessageEntity(message.id, chat.id, message.from, message.to, message.text, message.timestamp, message.mine, status)
         )
-
         database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))
     }
 
