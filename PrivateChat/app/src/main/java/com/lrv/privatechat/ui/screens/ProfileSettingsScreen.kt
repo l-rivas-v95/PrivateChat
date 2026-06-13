@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lrv.privatechat.model.AppColor
+import com.lrv.privatechat.network.payload.ChatPayloads
 import com.lrv.privatechat.ui.components.AvatarView
 import com.lrv.privatechat.ui.components.QrCodeView
 
@@ -43,7 +44,7 @@ fun ProfileSettingsScreen(
     onColorChange: (AppColor) -> Unit,
     onBack: () -> Unit
 ) {
-    val contactQrContent = buildContactQrContent(
+    val contactQrContent = ChatPayloads.contactQr(
         userId = userId,
         displayName = displayName,
         publicKey = publicKey
@@ -237,18 +238,4 @@ fun ProfileSettingsScreen(
             }
         }
     }
-}
-
-private fun buildContactQrContent(userId: String, displayName: String, publicKey: String): String {
-    return """
-        {"type":"privatechat_contact","userId":"${escapeJson(userId)}","displayName":"${escapeJson(displayName)}","publicKey":"${escapeJson(publicKey)}"}
-    """.trimIndent()
-}
-
-private fun escapeJson(value: String): String {
-    return value
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
 }
