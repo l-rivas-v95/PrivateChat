@@ -5,5 +5,6 @@ data class ChatItemUiModel(
     val displayName: String,
     val lastMessage: String,
     val timeText: String,
-    val avatarBase64: String? = null
+    val avatarBase64: String? = null,
+    val hasUnreadMessages: Boolean = false
 )
