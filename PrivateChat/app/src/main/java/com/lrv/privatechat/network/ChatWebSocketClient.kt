@@ -19,7 +19,7 @@ class ChatWebSocketClient(
         previousSocket?.close(1000, "Cierre normal")
 
         val request = Request.Builder()
-            .url("ws://10.0.2.2:8080/chat?user=$username")
+            .url("ws://192.168.1.66:8080/chat?user=$username")
             .build()
 
         val nextSocket = client.newWebSocket(request, object : WebSocketListener() {
