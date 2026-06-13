@@ -7,12 +7,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.lrv.privatechat.MainActivity
 import com.lrv.privatechat.R
+import com.lrv.privatechat.util.AppVisibilityTracker
 
 class ChatNotificationHelper(private val context: Context) {
 
@@ -30,6 +32,8 @@ class ChatNotificationHelper(private val context: Context) {
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Notificaciones de mensajes recibidos"
+            enableLights(true)
+            lightColor = Color.RED
         }
 
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -37,6 +41,8 @@ class ChatNotificationHelper(private val context: Context) {
     }
 
     fun showMessageNotification(senderName: String, messageText: String) {
+        if (AppVisibilityTracker.isInForeground) return
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             if (!granted) return
@@ -59,6 +65,8 @@ class ChatNotificationHelper(private val context: Context) {
             .setContentText(messageText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setColor(Color.RED)
+            .setColorized(true)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
