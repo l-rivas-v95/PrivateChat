@@ -3,6 +3,7 @@ package com.lrv.privatechat.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -129,11 +131,34 @@ fun ChatDetailScreen(
         )
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFECE5DD))
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = if (isUnknownContact) 104.dp else 62.dp, bottom = 70.dp)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(Color(0xFFECE5DD))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(messages) { msg ->
+                    MessageBubble(
+                        message = msg,
+                        appColor = appColor,
+                        onDelete = onDeleteMessage
+                    )
+                }
+            }
+        }
+
         ChatHeader(
             contactName = contactName,
             contactAvatarBase64 = contactAvatarBase64,
@@ -142,25 +167,9 @@ fun ChatDetailScreen(
             onBack = onBack,
             onEditName = { showEditNameDialog = true },
             onClearChat = { showClearChatDialog = true },
-            onSaveUnknownContact = { showSaveContactDialog = true }
+            onSaveUnknownContact = { showSaveContactDialog = true },
+            modifier = Modifier.align(Alignment.TopCenter)
         )
-
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(Color(0xFFECE5DD))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(messages) { msg ->
-                MessageBubble(
-                    message = msg,
-                    appColor = appColor,
-                    onDelete = onDeleteMessage
-                )
-            }
-        }
 
         MessageInputBar(
             message = message,
@@ -171,7 +180,8 @@ fun ChatDetailScreen(
                     onSend(message)
                     message = ""
                 }
-            }
+            },
+            modifier = Modifier.align(Alignment.BottomCenter)
         )
     }
 }
@@ -185,15 +195,16 @@ private fun ChatHeader(
     onBack: () -> Unit,
     onEditName: () -> Unit,
     onClearChat: () -> Unit,
-    onSaveUnknownContact: () -> Unit
+    onSaveUnknownContact: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Surface(color = appColor.main) {
+    Surface(color = appColor.main, modifier = modifier.fillMaxWidth()) {
         Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 10.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onBack) {
                     Text("←", color = Color.White)
@@ -244,7 +255,7 @@ private fun ChatHeader(
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Este usuario no está guardado",
@@ -266,15 +277,16 @@ private fun MessageInputBar(
     message: String,
     appColor: AppColor,
     onMessageChange: (String) -> Unit,
-    onSendClick: () -> Unit
+    onSendClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFFECE5DD))
             .padding(8.dp)
             .imePadding(),
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedTextField(
             value = message,
