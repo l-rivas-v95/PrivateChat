@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -25,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +61,13 @@ fun ChatDetailScreen(
     var showSaveContactDialog by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showClearChatDialog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(contact, messages.size, messages.lastOrNull()?.id) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
+        }
+    }
 
     if (showSaveContactDialog) {
         SaveContactDialog(
@@ -74,7 +83,6 @@ fun ChatDetailScreen(
 
     if (showEditNameDialog) {
         var editedName by remember(showEditNameDialog) { mutableStateOf(contactName) }
-
         AlertDialog(
             onDismissRequest = { showEditNameDialog = false },
             title = { Text("Editar contacto") },
@@ -96,9 +104,7 @@ fun ChatDetailScreen(
                     }
                 ) { Text("Guardar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showEditNameDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showEditNameDialog = false }) { Text("Cancelar") } }
         )
     }
 
@@ -115,9 +121,7 @@ fun ChatDetailScreen(
                     }
                 ) { Text("Vaciar") }
             },
-            dismissButton = {
-                TextButton(onClick = { showClearChatDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showClearChatDialog = false }) { Text("Cancelar") } }
         )
     }
 
@@ -138,6 +142,7 @@ fun ChatDetailScreen(
         )
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
@@ -147,11 +152,7 @@ fun ChatDetailScreen(
             contentPadding = PaddingValues(bottom = 8.dp)
         ) {
             items(messages) { msg ->
-                MessageBubble(
-                    message = msg,
-                    appColor = appColor,
-                    onDelete = onDeleteMessage
-                )
+                MessageBubble(message = msg, appColor = appColor, onDelete = onDeleteMessage)
             }
         }
 
@@ -190,60 +191,22 @@ private fun ChatHeader(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TextButton(onClick = onBack) { Text("←", color = Color.White) }
-
-                Surface(
-                    shape = CircleShape,
-                    color = Color.Transparent,
-                    modifier = Modifier.clickable { onEditName() }
-                ) {
-                    AvatarView(
-                        displayName = contactName,
-                        avatarBase64 = contactAvatarBase64,
-                        appColor = appColor,
-                        size = 42.dp
-                    )
+                Surface(shape = CircleShape, color = Color.Transparent, modifier = Modifier.clickable { onEditName() }) {
+                    AvatarView(displayName = contactName, avatarBase64 = contactAvatarBase64, appColor = appColor, size = 42.dp)
                 }
-
                 Spacer(modifier = Modifier.width(12.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onEditName() }
-                ) {
-                    Text(
-                        text = contactName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "Toca para editar",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
+                Column(modifier = Modifier.weight(1f).clickable { onEditName() }) {
+                    Text(text = contactName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(text = "Toca para editar", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
                 }
-
                 TextButton(onClick = onClearChat) { Text("Vaciar", color = Color.White) }
             }
 
             if (isUnknownContact) {
-                Surface(
-                    color = Color.White.copy(alpha = 0.12f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Este usuario no está guardado",
-                            color = Color.White,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = onSaveUnknownContact) {
-                            Text("Guardar contacto", color = Color.White)
-                        }
+                Surface(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Este usuario no está guardado", color = Color.White, modifier = Modifier.weight(1f))
+                        TextButton(onClick = onSaveUnknownContact) { Text("Guardar contacto", color = Color.White) }
                     }
                 }
             }
@@ -275,17 +238,13 @@ private fun MessageInputBar(
                 .weight(1f)
                 .background(Color.White, RoundedCornerShape(28.dp))
         )
-
         Spacer(modifier = Modifier.width(8.dp))
-
         Button(
             onClick = onSendClick,
             shape = CircleShape,
             modifier = Modifier.size(54.dp),
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
-        ) {
-            Text("➤", color = Color.White)
-        }
+        ) { Text("➤", color = Color.White) }
     }
 }
