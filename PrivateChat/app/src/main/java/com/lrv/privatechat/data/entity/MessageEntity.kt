@@ -14,5 +14,6 @@ data class MessageEntity(
     val body: String,
     val timestamp: Long,
     val isMine: Boolean,
-    val deliveryStatus: String
+    val deliveryStatus: String,
+    val isRead: Boolean = false
 )
