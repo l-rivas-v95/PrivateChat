@@ -15,6 +15,8 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 @Component
 public class ChatSocketHandler extends TextWebSocketHandler {
 
+    private static final int MAX_PAYLOAD_CHARS = 16_000;
+
     private final Map<String, WebSocketSession> users = new ConcurrentHashMap<>();
     private final Map<String, List<String>> pendingMessages = new ConcurrentHashMap<>();
     private final Map<String, List<String>> pendingAcks = new ConcurrentHashMap<>();
@@ -38,6 +40,12 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String payload = message.getPayload();
+
+        if (isTooLarge(payload)) {
+            System.out.println("Payload descartado por tamaño: " + payload.length());
+            return;
+        }
+
         String to = ChatPayloadReader.value(payload, "to");
 
         if (to == null || to.isBlank()) {
@@ -68,13 +76,22 @@ public class ChatSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        int delivered = 0;
+        int discarded = 0;
+
         for (String payload : pending) {
+            if (isTooLarge(payload)) {
+                discarded++;
+                continue;
+            }
+
             if (safeSend(session, payload)) {
+                delivered++;
                 sendOrQueueAck(payload);
             }
         }
 
-        System.out.println("Mensajes pendientes entregados a " + user + ": " + pending.size());
+        System.out.println("Mensajes pendientes entregados a " + user + ": " + delivered + ", descartados: " + discarded);
     }
 
     private void deliverPendingAcks(String user, WebSocketSession session) {
@@ -116,7 +133,7 @@ public class ChatSocketHandler extends TextWebSocketHandler {
 
     private boolean safeSend(WebSocketSession session, String payload) {
         try {
-            if (session == null || !session.isOpen()) {
+            if (session == null || !session.isOpen() || isTooLarge(payload)) {
                 return false;
             }
             session.sendMessage(new TextMessage(payload));
@@ -126,6 +143,10 @@ public class ChatSocketHandler extends TextWebSocketHandler {
             users.entrySet().removeIf(entry -> entry.getValue().getId().equals(session.getId()));
             return false;
         }
+    }
+
+    private boolean isTooLarge(String payload) {
+        return payload != null && payload.length() > MAX_PAYLOAD_CHARS;
     }
 
     @Override
