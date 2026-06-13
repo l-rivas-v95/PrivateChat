@@ -14,7 +14,10 @@ val localProperties = Properties().apply {
     }
 }
 
-val chatServerUrl = localProperties.getProperty("CHAT_SERVER_URL", "ws://x:8080")
+val chatServerUrl = localProperties
+    .getProperty("CHAT_SERVER_URL", "ws://x:8080")
+    .trim()
+    .removeSurrounding("\"")
 
 android {
     namespace = "com.lrv.privatechat"
