@@ -3,17 +3,12 @@ package com.lrv.privatechat.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -126,35 +121,11 @@ fun ChatDetailScreen(
         )
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFECE5DD))
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = if (isUnknownContact) 104.dp else 62.dp)
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color(0xFFECE5DD))
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 86.dp)
-            ) {
-                items(messages) { msg ->
-                    MessageBubble(
-                        message = msg,
-                        appColor = appColor,
-                        onDelete = onDeleteMessage
-                    )
-                }
-            }
-        }
-
         ChatHeader(
             contactName = contactName,
             contactAvatarBase64 = contactAvatarBase64,
@@ -163,9 +134,26 @@ fun ChatDetailScreen(
             onBack = onBack,
             onEditName = { showEditNameDialog = true },
             onClearChat = { showClearChatDialog = true },
-            onSaveUnknownContact = { showSaveContactDialog = true },
-            modifier = Modifier.align(Alignment.TopCenter)
+            onSaveUnknownContact = { showSaveContactDialog = true }
         )
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color(0xFFECE5DD))
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 8.dp)
+        ) {
+            items(messages) { msg ->
+                MessageBubble(
+                    message = msg,
+                    appColor = appColor,
+                    onDelete = onDeleteMessage
+                )
+            }
+        }
 
         MessageInputBar(
             message = message,
@@ -176,8 +164,7 @@ fun ChatDetailScreen(
                     onSend(message)
                     message = ""
                 }
-            },
-            modifier = Modifier.align(Alignment.BottomCenter)
+            }
         )
     }
 }
@@ -272,14 +259,9 @@ private fun MessageInputBar(
     onSendClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomPadding = if (imeBottom > 0.dp) imeBottom else navigationBottom
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = bottomPadding)
             .background(Color(0xFFECE5DD))
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
