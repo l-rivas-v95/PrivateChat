@@ -129,13 +129,6 @@ fun ChatsScreen(
                         Text("+ Nuevo chat", color = appColor.main)
                     }
                 }
-
-                Text(
-                    text = "Mi ID: ${userId.take(8)}...",
-                    color = Color.White.copy(alpha = 0.85f),
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
         }
 
@@ -153,9 +146,7 @@ fun ChatsScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 if (pendingContacts.isNotEmpty()) {
-                    item {
-                        SectionTitle("Solicitudes pendientes")
-                    }
+                    item { SectionTitle("Solicitudes pendientes") }
                     items(pendingContacts) { contact ->
                         PendingContactRow(
                             contact = contact,
@@ -167,21 +158,14 @@ fun ChatsScreen(
                 }
 
                 if (contacts.isNotEmpty()) {
-                    item {
-                        SectionTitle("Chats")
-                    }
+                    item { SectionTitle("Chats") }
                     items(contacts) { contact ->
-                        val lastMessage = messages
-                            .lastOrNull {
-                                (it.from == userId && it.to == contact.username) ||
-                                    (it.from == contact.username && it.to == userId)
-                            }
-
-                        val visibleName = if (contact.displayName == contact.username) {
-                            UNKNOWN_CONTACT_NAME
-                        } else {
-                            contact.displayName
+                        val lastMessage = messages.lastOrNull {
+                            (it.from == userId && it.to == contact.username) ||
+                                (it.from == contact.username && it.to == userId)
                         }
+
+                        val visibleName = if (contact.displayName == contact.username) UNKNOWN_CONTACT_NAME else contact.displayName
 
                         val chatItem = ChatItemUiModel(
                             username = contact.username,
