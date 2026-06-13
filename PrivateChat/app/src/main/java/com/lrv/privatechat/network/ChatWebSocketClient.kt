@@ -6,7 +6,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import com.lrv.privatechat.BuildConfig
 
 class ChatWebSocketClient(
     private val onMessageReceived: (String) -> Unit,
