@@ -38,8 +38,7 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-
-        String to = extractValue(payload, "to");
+        String to = ChatPayloadReader.value(payload, "to");
 
         if (to == null || to.isBlank()) {
             session.sendMessage(new TextMessage("Error: destinatario no encontrado"));
@@ -91,15 +90,14 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     }
 
     private void sendOrQueueAck(String payload) throws Exception {
-        String from = extractValue(payload, "from");
-        String messageId = extractValue(payload, "id");
+        String from = ChatPayloadReader.value(payload, "from");
+        String messageId = ChatPayloadReader.value(payload, "id");
 
         if (from == null || from.isBlank() || messageId == null || messageId.isBlank()) {
             return;
         }
 
-        String ack = "{\"type\":\"ack\",\"messageId\":\"" + messageId + "\",\"status\":\"DELIVERED\"}";
-
+        String ack = ChatPayloadReader.ack(messageId);
         WebSocketSession senderSession = users.get(from);
 
         if (senderSession != null && senderSession.isOpen()) {
@@ -136,25 +134,5 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         }
 
         return null;
-    }
-
-    private String extractValue(String json, String key) {
-        String search = "\"" + key + "\":\"";
-
-        int start = json.indexOf(search);
-
-        if (start == -1) {
-            return null;
-        }
-
-        start += search.length();
-
-        int end = json.indexOf("\"", start);
-
-        if (end == -1) {
-            return null;
-        }
-
-        return json.substring(start, end);
     }
 }
