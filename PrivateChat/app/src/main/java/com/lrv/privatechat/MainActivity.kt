@@ -12,6 +12,7 @@ import com.lrv.privatechat.notifications.ChatNotificationHelper
 import com.lrv.privatechat.service.ChatForegroundService
 import com.lrv.privatechat.ui.app.PrivateChatApp
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
+import com.lrv.privatechat.util.AppVisibilityTracker
 
 class MainActivity : ComponentActivity() {
 
@@ -31,6 +32,16 @@ class MainActivity : ComponentActivity() {
                 PrivateChatApp()
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppVisibilityTracker.markForeground()
+    }
+
+    override fun onStop() {
+        AppVisibilityTracker.markBackground()
+        super.onStop()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
