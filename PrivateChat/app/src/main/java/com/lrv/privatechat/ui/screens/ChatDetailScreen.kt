@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -97,14 +99,10 @@ fun ChatDetailScreen(
                             showEditNameDialog = false
                         }
                     }
-                ) {
-                    Text("Guardar")
-                }
+                ) { Text("Guardar") }
             },
             dismissButton = {
-                TextButton(onClick = { showEditNameDialog = false }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showEditNameDialog = false }) { Text("Cancelar") }
             }
         )
     }
@@ -120,14 +118,10 @@ fun ChatDetailScreen(
                         onClearChat()
                         showClearChatDialog = false
                     }
-                ) {
-                    Text("Vaciar")
-                }
+                ) { Text("Vaciar") }
             },
             dismissButton = {
-                TextButton(onClick = { showClearChatDialog = false }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = { showClearChatDialog = false }) { Text("Cancelar") }
             }
         )
     }
@@ -208,9 +202,7 @@ private fun ChatHeader(
                     .padding(horizontal = 8.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onBack) {
-                    Text("←", color = Color.White)
-                }
+                TextButton(onClick = onBack) { Text("←", color = Color.White) }
 
                 Surface(
                     shape = CircleShape,
@@ -245,9 +237,7 @@ private fun ChatHeader(
                     )
                 }
 
-                TextButton(onClick = onClearChat) {
-                    Text("Vaciar", color = Color.White)
-                }
+                TextButton(onClick = onClearChat) { Text("Vaciar", color = Color.White) }
             }
 
             if (isUnknownContact) {
@@ -282,11 +272,14 @@ private fun MessageInputBar(
     onSendClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPadding = if (imeBottom > 0.dp) imeBottom else navigationBottom
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .imePadding()
-            .navigationBarsPadding()
+            .padding(bottom = bottomPadding)
             .background(Color(0xFFECE5DD))
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
