@@ -33,7 +33,8 @@ class ChatWebSocketClient(
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 if (this@ChatWebSocketClient.webSocket == webSocket) {
-                    onMessageReceived(text)
+                    runCatching { onMessageReceived(text) }
+                        .onFailure { onStatusChanged("Error procesando mensaje: ${it.message}") }
                 }
             }
 
@@ -57,6 +58,10 @@ class ChatWebSocketClient(
 
     fun send(message: String): Boolean {
         return webSocket?.send(message) == true
+    }
+
+    fun isConnected(): Boolean {
+        return webSocket != null
     }
 
     fun disconnect() {

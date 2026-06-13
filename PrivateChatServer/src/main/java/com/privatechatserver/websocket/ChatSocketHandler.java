@@ -36,20 +36,21 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String payload = message.getPayload();
         String to = ChatPayloadReader.value(payload, "to");
 
         if (to == null || to.isBlank()) {
-            session.sendMessage(new TextMessage("Error: destinatario no encontrado"));
+            safeSend(session, "Error: destinatario no encontrado");
             return;
         }
 
         WebSocketSession receiverSession = users.get(to);
 
         if (receiverSession != null && receiverSession.isOpen()) {
-            receiverSession.sendMessage(new TextMessage(payload));
-            sendOrQueueAck(payload);
+            if (safeSend(receiverSession, payload)) {
+                sendOrQueueAck(payload);
+            }
             return;
         }
 
@@ -60,7 +61,7 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         System.out.println("Mensaje pendiente guardado para: " + to);
     }
 
-    private void deliverPendingMessages(String user, WebSocketSession session) throws Exception {
+    private void deliverPendingMessages(String user, WebSocketSession session) {
         List<String> pending = pendingMessages.remove(user);
 
         if (pending == null) {
@@ -68,14 +69,15 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         }
 
         for (String payload : pending) {
-            session.sendMessage(new TextMessage(payload));
-            sendOrQueueAck(payload);
+            if (safeSend(session, payload)) {
+                sendOrQueueAck(payload);
+            }
         }
 
         System.out.println("Mensajes pendientes entregados a " + user + ": " + pending.size());
     }
 
-    private void deliverPendingAcks(String user, WebSocketSession session) throws Exception {
+    private void deliverPendingAcks(String user, WebSocketSession session) {
         List<String> acks = pendingAcks.remove(user);
 
         if (acks == null) {
@@ -83,13 +85,13 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         }
 
         for (String ack : acks) {
-            session.sendMessage(new TextMessage(ack));
+            safeSend(session, ack);
         }
 
         System.out.println("ACK pendientes entregados a " + user + ": " + acks.size());
     }
 
-    private void sendOrQueueAck(String payload) throws Exception {
+    private void sendOrQueueAck(String payload) {
         String from = ChatPayloadReader.value(payload, "from");
         String messageId = ChatPayloadReader.value(payload, "id");
 
@@ -101,7 +103,7 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         WebSocketSession senderSession = users.get(from);
 
         if (senderSession != null && senderSession.isOpen()) {
-            senderSession.sendMessage(new TextMessage(ack));
+            safeSend(senderSession, ack);
             return;
         }
 
@@ -112,10 +114,24 @@ public class ChatSocketHandler extends TextWebSocketHandler {
         System.out.println("ACK pendiente guardado para: " + from);
     }
 
+    private boolean safeSend(WebSocketSession session, String payload) {
+        try {
+            if (session == null || !session.isOpen()) {
+                return false;
+            }
+            session.sendMessage(new TextMessage(payload));
+            return true;
+        } catch (Exception exception) {
+            System.out.println("No se pudo enviar WebSocket: " + exception.getMessage());
+            users.entrySet().removeIf(entry -> entry.getValue().getId().equals(session.getId()));
+            return false;
+        }
+    }
+
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         users.entrySet().removeIf(entry -> entry.getValue().getId().equals(session.getId()));
-        System.out.println("Usuario desconectado");
+        System.out.println("Usuario desconectado: " + status);
     }
 
     private String getUserFromQuery(URI uri) {
