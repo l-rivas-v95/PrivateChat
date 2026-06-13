@@ -16,6 +16,7 @@ data class PrivateChatUiState(
     val status: String = "Desconectado",
     val messages: List<UiMessage> = emptyList(),
     val contacts: List<ContactEntity> = emptyList(),
+    val unreadCounts: Map<String, Int> = emptyMap(),
     val showNewChatDialog: Boolean = false,
     val scannedQrContent: String? = null
 ) {
