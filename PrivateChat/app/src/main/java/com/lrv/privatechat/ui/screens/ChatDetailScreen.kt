@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -23,7 +22,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -131,127 +129,27 @@ fun ChatDetailScreen(
         )
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = Color(0xFFECE5DD),
-        topBar = {
-            Surface(color = appColor.main) {
-                Column {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 10.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = onBack) {
-                            Text("←", color = Color.White)
-                        }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFECE5DD))
+    ) {
+        ChatHeader(
+            contactName = contactName,
+            contactAvatarBase64 = contactAvatarBase64,
+            isUnknownContact = isUnknownContact,
+            appColor = appColor,
+            onBack = onBack,
+            onEditName = { showEditNameDialog = true },
+            onClearChat = { showClearChatDialog = true },
+            onSaveUnknownContact = { showSaveContactDialog = true }
+        )
 
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.Transparent,
-                            modifier = Modifier.clickable { showEditNameDialog = true }
-                        ) {
-                            AvatarView(
-                                displayName = contactName,
-                                avatarBase64 = contactAvatarBase64,
-                                appColor = appColor,
-                                size = 42.dp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { showEditNameDialog = true }
-                        ) {
-                            Text(
-                                text = contactName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "Toca para editar",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.85f)
-                            )
-                        }
-
-                        TextButton(onClick = { showClearChatDialog = true }) {
-                            Text("Vaciar", color = Color.White)
-                        }
-                    }
-
-                    if (isUnknownContact) {
-                        Surface(
-                            color = Color.White.copy(alpha = 0.12f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Este usuario no está guardado",
-                                    color = Color.White,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                TextButton(onClick = { showSaveContactDialog = true }) {
-                                    Text("Guardar contacto", color = Color.White)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFFECE5DD))
-                    .imePadding()
-                    .padding(8.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { message = it },
-                    placeholder = { Text("Mensaje") },
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(Color.White, RoundedCornerShape(28.dp))
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                Button(
-                    onClick = {
-                        if (message.isNotBlank()) {
-                            onSend(message)
-                            message = ""
-                        }
-                    },
-                    shape = CircleShape,
-                    modifier = Modifier.size(54.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
-                ) {
-                    Text("➤", color = Color.White)
-                }
-            }
-        }
-    ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .background(Color(0xFFECE5DD))
-                .padding(innerPadding)
-                .consumeWindowInsets(innerPadding)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -262,6 +160,142 @@ fun ChatDetailScreen(
                     onDelete = onDeleteMessage
                 )
             }
+        }
+
+        MessageInputBar(
+            message = message,
+            appColor = appColor,
+            onMessageChange = { message = it },
+            onSendClick = {
+                if (message.isNotBlank()) {
+                    onSend(message)
+                    message = ""
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ChatHeader(
+    contactName: String,
+    contactAvatarBase64: String?,
+    isUnknownContact: Boolean,
+    appColor: AppColor,
+    onBack: () -> Unit,
+    onEditName: () -> Unit,
+    onClearChat: () -> Unit,
+    onSaveUnknownContact: () -> Unit
+) {
+    Surface(color = appColor.main) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onBack) {
+                    Text("←", color = Color.White)
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    modifier = Modifier.clickable { onEditName() }
+                ) {
+                    AvatarView(
+                        displayName = contactName,
+                        avatarBase64 = contactAvatarBase64,
+                        appColor = appColor,
+                        size = 42.dp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onEditName() }
+                ) {
+                    Text(
+                        text = contactName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Toca para editar",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
+
+                TextButton(onClick = onClearChat) {
+                    Text("Vaciar", color = Color.White)
+                }
+            }
+
+            if (isUnknownContact) {
+                Surface(
+                    color = Color.White.copy(alpha = 0.12f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Este usuario no está guardado",
+                            color = Color.White,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onSaveUnknownContact) {
+                            Text("Guardar contacto", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageInputBar(
+    message: String,
+    appColor: AppColor,
+    onMessageChange: (String) -> Unit,
+    onSendClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFECE5DD))
+            .padding(8.dp)
+            .imePadding(),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = message,
+            onValueChange = onMessageChange,
+            placeholder = { Text("Mensaje") },
+            shape = RoundedCornerShape(28.dp),
+            modifier = Modifier
+                .weight(1f)
+                .background(Color.White, RoundedCornerShape(28.dp))
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Button(
+            onClick = onSendClick,
+            shape = CircleShape,
+            modifier = Modifier.size(54.dp),
+            contentPadding = PaddingValues(0.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+        ) {
+            Text("➤", color = Color.White)
         }
     }
 }
