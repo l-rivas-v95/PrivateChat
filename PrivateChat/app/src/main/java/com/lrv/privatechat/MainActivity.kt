@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
         var messages by remember { mutableStateOf(listOf<UiMessage>()) }
         var contacts by remember { mutableStateOf(listOf<ContactEntity>()) }
         var showNewChatDialog by remember { mutableStateOf(false) }
+        var scannedQrContent by remember { mutableStateOf<String?>(null) }
 
         fun normalizeContacts(loaded: List<ContactEntity>): List<ContactEntity> {
             return loaded
@@ -253,11 +254,17 @@ class MainActivity : ComponentActivity() {
         if (showNewChatDialog) {
             NewChatDialog(
                 appColor = selectedColor,
+                scannedQrContent = scannedQrContent,
                 onDismiss = { showNewChatDialog = false },
+                onScanQr = {
+                    scannedQrContent = null
+                    // TODO: abrir pantalla de escaneo QR con cámara.
+                },
                 onSaveManual = { contactId, contactName, publicKey ->
                     saveContact(contactId, contactName, publicKey) { loaded -> updateContacts(loaded) }
                     sendKeyExchange(contactId)
                     localAvatarBase64?.let { sendAvatarToContact(contactId, it) }
+                    scannedQrContent = null
                     showNewChatDialog = false
                 }
             )

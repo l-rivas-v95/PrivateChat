@@ -26,12 +26,24 @@ import com.lrv.privatechat.model.AppColor
 @Composable
 fun NewChatDialog(
     appColor: AppColor,
+    scannedQrContent: String?,
     onDismiss: () -> Unit,
+    onScanQr: () -> Unit,
     onSaveManual: (String, String, String?) -> Unit
 ) {
     var contactId by remember { mutableStateOf("") }
     var contactName by remember { mutableStateOf("") }
     var publicKey by remember { mutableStateOf("") }
+    var importedQr by remember { mutableStateOf<String?>(null) }
+
+    if (!scannedQrContent.isNullOrBlank() && scannedQrContent != importedQr) {
+        parseContactQr(scannedQrContent)?.let { contact ->
+            contactId = contact.userId
+            contactName = contact.displayName
+            publicKey = contact.publicKey
+            importedQr = scannedQrContent
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -79,11 +91,21 @@ fun NewChatDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "QR: pendiente de implementar escáner",
-                        color = appColor.main,
-                        modifier = Modifier.padding(12.dp)
-                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = if (importedQr == null) "QR: importa los datos del contacto" else "QR importado correctamente",
+                            color = appColor.main,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = onScanQr,
+                            colors = ButtonDefaults.buttonColors(containerColor = appColor.main),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Escanear QR")
+                        }
+                    }
                 }
             }
         },
@@ -105,4 +127,43 @@ fun NewChatDialog(
             }
         }
     )
+}
+
+private data class ContactQrData(
+    val userId: String,
+    val displayName: String,
+    val publicKey: String
+)
+
+private fun parseContactQr(content: String): ContactQrData? {
+    val type = extractValue(content, "type")
+    if (type != "privatechat_contact") return null
+
+    val userId = extractValue(content, "userId")
+    val displayName = extractValue(content, "displayName")
+    val publicKey = extractValue(content, "publicKey")
+
+    if (userId.isBlank()) return null
+
+    return ContactQrData(
+        userId = userId,
+        displayName = displayName.ifBlank { userId },
+        publicKey = publicKey
+    )
+}
+
+private fun extractValue(json: String, key: String): String {
+    val search = "\"$key\":\""
+    val start = json.indexOf(search)
+    if (start == -1) return ""
+
+    val valueStart = start + search.length
+    val end = json.indexOf("\"", valueStart)
+    if (end == -1) return ""
+
+    return json.substring(valueStart, end)
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
 }
