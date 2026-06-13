@@ -53,6 +53,7 @@ fun ChatsScreen(
     contacts: List<ContactEntity>,
     pendingContacts: List<ContactEntity>,
     messages: List<UiMessage>,
+    unreadCounts: Map<String, Int>,
     onToggleConnection: () -> Unit,
     onNewChat: () -> Unit,
     onOpenChat: (String) -> Unit,
@@ -157,7 +158,6 @@ fun ChatsScreen(
                             (it.from == userId && it.to == contact.username) ||
                                 (it.from == contact.username && it.to == userId)
                         }
-                        val hasUnreadMessages = lastMessage?.mine == false
                         val visibleName = if (contact.displayName == contact.username) UNKNOWN_CONTACT_NAME else contact.displayName
                         val chatItem = ChatItemUiModel(
                             username = contact.username,
@@ -165,7 +165,7 @@ fun ChatsScreen(
                             lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
                             timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: "",
                             avatarBase64 = contact.avatarBase64,
-                            hasUnreadMessages = hasUnreadMessages
+                            unreadCount = unreadCounts[contact.username] ?: 0
                         )
 
                         ChatListRow(
@@ -289,8 +289,17 @@ private fun ChatListRow(
                 Surface(
                     color = Color(0xFFE53935),
                     shape = CircleShape,
-                    modifier = Modifier.size(10.dp)
-                ) {}
+                    modifier = Modifier.size(18.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (chatItem.unreadCount > 9) "9+" else chatItem.unreadCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
         }
     }
