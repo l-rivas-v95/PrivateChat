@@ -81,10 +81,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(status = "Desconectado") }
     }
 
-    fun toggleConnection() {
-        if (_uiState.value.isConnected) disconnect() else connect()
-    }
-
+    fun toggleConnection() { if (_uiState.value.isConnected) disconnect() else connect() }
     fun showNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = true) } }
     fun hideNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = false) } }
     fun startQrScan() { _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) } }
@@ -96,6 +93,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             saveContactInternal(contactId, contactName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
             sendContactInvite(contactId)
+            sendLocalAvatarToContact(contactId)
             _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) }
         }
     }
@@ -105,6 +103,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             saveContactInternal(contactId, contactName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
             sendContactInvite(contactId)
+            sendLocalAvatarToContact(contactId)
         }
     }
 
@@ -114,6 +113,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             saveContactInternal(existing.username, existing.displayName, existing.publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
             sendContactAccept(contactUsername)
+            sendLocalAvatarToContact(contactUsername)
         }
     }
 
@@ -197,6 +197,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         imageBase64Encoder.encodeAvatarToBase64(uri)?.let { encoded ->
             preferences.edit().putString("local_avatar_base64", encoded).apply()
             _uiState.update { it.copy(localAvatarBase64 = encoded) }
+            sendLocalAvatarToAcceptedContacts(encoded)
         }
     }
 
@@ -209,7 +210,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             ChatPayloadTypes.CONTACT_INVITE -> handleContactInvite(received, from)
             ChatPayloadTypes.CONTACT_ACCEPT -> handleContactAccept(received, from)
             ChatPayloadTypes.KEY_EXCHANGE -> handleLegacyKeyExchange(received, from)
-            ChatPayloadTypes.PROFILE_AVATAR -> Unit
+            ChatPayloadTypes.PROFILE_AVATAR -> handleProfileAvatar(received, from)
             else -> handleChatMessage(received, from)
         }
     }
@@ -246,6 +247,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             saveContactInternal(from, displayName, publicKey, CONTACT_STATUS_ACCEPTED)
             updateContacts(database.contactDao().getContactsOnce())
+            sendLocalAvatarToContact(from)
         }
     }
 
@@ -255,6 +257,17 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         viewModelScope.launch {
             saveContactInternal(from, UNKNOWN_CONTACT_NAME, publicKey, CONTACT_STATUS_PENDING)
+            updateContacts(database.contactDao().getContactsOnce())
+        }
+    }
+
+    private fun handleProfileAvatar(received: String, from: String) {
+        val avatarBase64 = ChatPayloads.value(received, "avatarBase64")
+        val updatedAt = ChatPayloads.value(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
+        if (from.isBlank() || avatarBase64.isBlank() || avatarBase64.length > ImageBase64Encoder.MAX_AVATAR_BASE64_CHARS) return
+
+        viewModelScope.launch {
+            saveContactAvatarInternal(from, avatarBase64, updatedAt)
             updateContacts(database.contactDao().getContactsOnce())
         }
     }
@@ -280,9 +293,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun addSystemMessage(contact: String, text: String) {
         val state = _uiState.value
-        _uiState.update {
-            it.copy(messages = it.messages + UiMessage(from = state.connectedUserId, to = contact, text = text, mine = true, status = MESSAGE_STATUS_SENT))
-        }
+        _uiState.update { it.copy(messages = it.messages + UiMessage(from = state.connectedUserId, to = contact, text = text, mine = true, status = MESSAGE_STATUS_SENT)) }
     }
 
     private fun reloadLocalState() {
@@ -321,6 +332,26 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         chatClient.send(ChatPayloads.contactAccept(state.connectedUserId, to, state.displayName, state.localPublicKey))
     }
 
+    private fun sendLocalAvatarToContact(contactUsername: String) {
+        _uiState.value.localAvatarBase64?.let { avatarBase64 ->
+            if (avatarBase64.length <= ImageBase64Encoder.MAX_AVATAR_BASE64_CHARS) {
+                chatClient.send(ChatPayloads.profileAvatar(_uiState.value.connectedUserId, contactUsername, avatarBase64, System.currentTimeMillis()))
+            }
+        }
+    }
+
+    private fun sendLocalAvatarToAcceptedContacts(avatarBase64: String) {
+        if (avatarBase64.length > ImageBase64Encoder.MAX_AVATAR_BASE64_CHARS) return
+
+        _uiState.value.contacts
+            .filter { it.username != _uiState.value.connectedUserId }
+            .filter { it.status == CONTACT_STATUS_ACCEPTED }
+            .distinctBy { it.username }
+            .forEach { contact ->
+                chatClient.send(ChatPayloads.profileAvatar(_uiState.value.connectedUserId, contact.username, avatarBase64, System.currentTimeMillis()))
+            }
+    }
+
     private suspend fun saveContactInternal(contactId: String, contactName: String, publicKey: String?, status: String): ContactEntity {
         val now = System.currentTimeMillis()
         val existingContact = database.contactDao().findByUsername(contactId)
@@ -346,6 +377,26 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             createdAt = existingContact?.createdAt ?: now,
             lastSeenAt = now,
             status = nextStatus
+        )
+
+        database.contactDao().save(contact)
+        ensureChat(contactId)
+        return database.contactDao().findByUsername(contactId) ?: contact
+    }
+
+    private suspend fun saveContactAvatarInternal(contactId: String, avatarBase64: String, updatedAt: Long): ContactEntity {
+        val now = System.currentTimeMillis()
+        val existingContact = database.contactDao().findByUsername(contactId)
+        val contact = ContactEntity(
+            id = existingContact?.id ?: 0,
+            username = contactId,
+            displayName = existingContact?.displayName ?: UNKNOWN_CONTACT_NAME,
+            publicKey = existingContact?.publicKey,
+            avatarBase64 = avatarBase64,
+            avatarUpdatedAt = updatedAt,
+            createdAt = existingContact?.createdAt ?: now,
+            lastSeenAt = now,
+            status = existingContact?.status ?: CONTACT_STATUS_PENDING
         )
 
         database.contactDao().save(contact)
