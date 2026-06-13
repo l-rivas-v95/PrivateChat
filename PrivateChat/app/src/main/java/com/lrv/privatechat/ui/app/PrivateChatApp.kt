@@ -3,6 +3,7 @@ package com.lrv.privatechat.ui.app
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,6 +55,7 @@ fun PrivateChatApp(viewModel: PrivateChatViewModel = viewModel()) {
                 contacts = uiState.visibleContacts,
                 pendingContacts = uiState.pendingContacts,
                 messages = uiState.messages,
+                unreadCounts = uiState.unreadCounts,
                 onToggleConnection = viewModel::toggleConnection,
                 onNewChat = viewModel::showNewChatDialog,
                 onOpenChat = { contact -> navController.navigate(PrivateChatRoutes.chatDetail(contact)) },
@@ -72,6 +74,10 @@ fun PrivateChatApp(viewModel: PrivateChatViewModel = viewModel()) {
             val rawContactName = storedContact?.displayName ?: UNKNOWN_CONTACT_NAME
             val isUnknownContact = rawContactName == UNKNOWN_CONTACT_NAME || rawContactName == contact
             val contactName = if (isUnknownContact) UNKNOWN_CONTACT_NAME else rawContactName
+
+            LaunchedEffect(contact) {
+                viewModel.markChatAsRead(contact)
+            }
 
             ChatDetailScreen(
                 username = uiState.connectedUserId,
