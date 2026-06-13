@@ -17,6 +17,8 @@ import com.lrv.privatechat.model.MESSAGE_STATUS_SENT
 import com.lrv.privatechat.model.UNKNOWN_CONTACT_NAME
 import com.lrv.privatechat.model.UiMessage
 import com.lrv.privatechat.network.ChatWebSocketClient
+import com.lrv.privatechat.network.payload.ChatPayloadTypes
+import com.lrv.privatechat.network.payload.ChatPayloads
 import com.lrv.privatechat.util.ImageBase64Encoder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -146,12 +148,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             val chat = database.chatDao().findByContact(contactUsername) ?: return@launch
             database.chatMessageDao().deleteMessagesByChatId(chat.id)
-            database.chatDao().save(
-                chat.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    lastMessagePreview = "Sin mensajes todavía"
-                )
-            )
+            database.chatDao().save(chat.copy(updatedAt = System.currentTimeMillis(), lastMessagePreview = "Sin mensajes todavía"))
             _uiState.update { state ->
                 state.copy(
                     messages = state.messages.filterNot {
@@ -176,23 +173,13 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         if (storedContact?.publicKey.isNullOrBlank()) {
             sendKeyExchange(contactUsername)
-            addSystemMessage(
-                contactUsername,
-                "Intercambio de claves iniciado. Espera a que el contacto responda antes de enviar mensajes."
-            )
+            addSystemMessage(contactUsername, "Intercambio de claves iniciado. Espera a que el contacto responda antes de enviar mensajes.")
             reloadLocalState()
             return
         }
 
         val messageId = UUID.randomUUID().toString()
-        val payload = chatCryptoService.buildOutgoingPayload(
-            messageId = messageId,
-            from = state.connectedUserId,
-            to = contactUsername,
-            plainText = text,
-            contact = storedContact!!
-        )
-
+        val payload = chatCryptoService.buildOutgoingPayload(messageId, state.connectedUserId, contactUsername, text, storedContact)
         chatClient.send(payload)
 
         val uiMessage = UiMessage(
@@ -233,19 +220,15 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun handleIncomingPayload(received: String) {
-        val type = extractValue(received, "type")
-        val from = extractValue(received, "from")
+        val type = ChatPayloads.value(received, "type")
+        val from = ChatPayloads.value(received, "from")
 
         when (type) {
-            "ack" -> {
-                val messageId = extractValue(received, "messageId")
+            ChatPayloadTypes.ACK -> {
+                val messageId = ChatPayloads.value(received, "messageId")
                 if (messageId.isNotBlank()) {
                     _uiState.update { state ->
-                        state.copy(
-                            messages = state.messages.map { message ->
-                                if (message.id == messageId) message.copy(status = MESSAGE_STATUS_DELIVERED) else message
-                            }
-                        )
+                        state.copy(messages = state.messages.map { message -> if (message.id == messageId) message.copy(status = MESSAGE_STATUS_DELIVERED) else message })
                     }
                     viewModelScope.launch {
                         database.chatMessageDao().updateDeliveryStatusByMessageId(messageId, MESSAGE_STATUS_DELIVERED)
@@ -255,7 +238,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                 return
             }
 
-            "key_exchange" -> {
+            ChatPayloadTypes.KEY_EXCHANGE -> {
                 val publicKey = chatCryptoService.getPublicKeyFromPayload(received)
                 if (from.isNotBlank() && publicKey.isNotBlank()) {
                     viewModelScope.launch {
@@ -268,9 +251,9 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                 return
             }
 
-            "profile_avatar" -> {
-                val avatarBase64 = extractValue(received, "avatarBase64")
-                val updatedAt = extractValue(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
+            ChatPayloadTypes.PROFILE_AVATAR -> {
+                val avatarBase64 = ChatPayloads.value(received, "avatarBase64")
+                val updatedAt = ChatPayloads.value(received, "updatedAt").toLongOrNull() ?: System.currentTimeMillis()
                 if (from.isNotBlank() && avatarBase64.isNotBlank()) {
                     viewModelScope.launch {
                         saveContactAvatarInternal(from, avatarBase64, updatedAt)
@@ -282,20 +265,12 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         val state = _uiState.value
-        val to = extractValue(received, "to")
+        val to = ChatPayloads.value(received, "to")
         val text = chatCryptoService.readPlainTextFromPayload(received, from, state.contacts)
-        val messageId = extractValue(received, "id").ifBlank { UUID.randomUUID().toString() }
+        val messageId = ChatPayloads.value(received, "id").ifBlank { UUID.randomUUID().toString() }
 
         if (from.isNotBlank() && text.isNotBlank()) {
-            val uiMessage = UiMessage(
-                id = messageId,
-                from = from,
-                to = to,
-                text = text,
-                mine = false,
-                status = MESSAGE_STATUS_RECEIVED
-            )
-
+            val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
             _uiState.update { it.copy(messages = it.messages + uiMessage) }
 
             viewModelScope.launch {
@@ -310,15 +285,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private fun addSystemMessage(contact: String, text: String) {
         val state = _uiState.value
         _uiState.update {
-            it.copy(
-                messages = it.messages + UiMessage(
-                    from = state.connectedUserId,
-                    to = contact,
-                    text = text,
-                    mine = true,
-                    status = MESSAGE_STATUS_SENT
-                )
-            )
+            it.copy(messages = it.messages + UiMessage(from = state.connectedUserId, to = contact, text = text, mine = true, status = MESSAGE_STATUS_SENT))
         }
     }
 
@@ -357,13 +324,10 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun sendAvatarToContact(contactUsername: String, avatarBase64: String) {
-        chatClient.send(buildProfileAvatarPayload(_uiState.value.connectedUserId, contactUsername, avatarBase64))
+        chatClient.send(ChatPayloads.profileAvatar(_uiState.value.connectedUserId, contactUsername, avatarBase64, System.currentTimeMillis()))
     }
 
-    private fun sendAvatarToContacts(
-        avatarBase64: String,
-        loadedContacts: List<ContactEntity> = _uiState.value.contacts
-    ) {
+    private fun sendAvatarToContacts(avatarBase64: String, loadedContacts: List<ContactEntity> = _uiState.value.contacts) {
         loadedContacts
             .filter { it.username != _uiState.value.connectedUserId }
             .distinctBy { it.username }
@@ -421,17 +385,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         chats.forEach { chat ->
             val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
-                .map { entity ->
-                    UiMessage(
-                        id = entity.messageId,
-                        from = entity.senderUsername,
-                        to = entity.receiverUsername,
-                        text = entity.body,
-                        mine = entity.isMine,
-                        timestamp = entity.timestamp,
-                        status = entity.deliveryStatus
-                    )
-                }
+                .map { entity -> UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus) }
             loadedMessages.addAll(chatMessages)
         }
 
@@ -441,24 +395,10 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String) {
         val chat = ensureChat(contactUsername)
         database.chatMessageDao().saveChatMessage(
-            MessageEntity(
-                messageId = message.id,
-                chatId = chat.id,
-                senderUsername = message.from,
-                receiverUsername = message.to,
-                body = message.text,
-                timestamp = message.timestamp,
-                isMine = message.mine,
-                deliveryStatus = status
-            )
+            MessageEntity(message.id, chat.id, message.from, message.to, message.text, message.timestamp, message.mine, status)
         )
 
-        database.chatDao().save(
-            chat.copy(
-                updatedAt = message.timestamp,
-                lastMessagePreview = message.text
-            )
-        )
+        database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))
     }
 
     private suspend fun ensureChat(contactUsername: String): ChatEntity {
@@ -466,40 +406,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         if (existingChat != null) return existingChat
 
         val now = System.currentTimeMillis()
-        val chatId = database.chatDao().save(
-            ChatEntity(
-                contactUsername = contactUsername,
-                createdAt = now,
-                updatedAt = now,
-                lastMessagePreview = "Sin mensajes todavía"
-            )
-        )
-
-        return ChatEntity(
-            id = chatId,
-            contactUsername = contactUsername,
-            createdAt = now,
-            updatedAt = now,
-            lastMessagePreview = "Sin mensajes todavía"
-        )
-    }
-
-    private fun buildProfileAvatarPayload(from: String, to: String, avatarBase64: String): String {
-        return """
-            {"type":"profile_avatar","from":"$from","to":"$to","avatarBase64":"$avatarBase64","updatedAt":"${System.currentTimeMillis()}"}
-        """.trimIndent()
-    }
-
-    private fun extractValue(json: String, key: String): String {
-        val search = "\"$key\":\""
-        val start = json.indexOf(search)
-        if (start == -1) return ""
-
-        val valueStart = start + search.length
-        val end = json.indexOf("\"", valueStart)
-        if (end == -1) return ""
-
-        return json.substring(valueStart, end)
+        val chatId = database.chatDao().save(ChatEntity(contactUsername = contactUsername, createdAt = now, updatedAt = now, lastMessagePreview = "Sin mensajes todavía"))
+        return ChatEntity(id = chatId, contactUsername = contactUsername, createdAt = now, updatedAt = now, lastMessagePreview = "Sin mensajes todavía")
     }
 
     override fun onCleared() {
