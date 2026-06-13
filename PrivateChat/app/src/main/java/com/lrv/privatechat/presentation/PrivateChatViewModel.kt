@@ -276,18 +276,22 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     private fun handleChatMessage(received: String, from: String) {
-        val state = _uiState.value
         val to = ChatPayloads.value(received, "to")
-        val text = chatCryptoService.readPlainTextFromPayload(received, from, state.contacts)
         val messageId = ChatPayloads.value(received, "id").ifBlank { UUID.randomUUID().toString() }
-
-        if (from.isBlank() || text.isBlank()) return
-
-        val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
-        _uiState.update { it.copy(messages = it.messages + uiMessage) }
+        if (from.isBlank()) return
 
         viewModelScope.launch {
+            val loadedContacts = database.contactDao().getContactsOnce()
+            val text = chatCryptoService.readPlainTextFromPayload(received, from, loadedContacts)
+
+            if (text.isBlank() || text == ChatCryptoService.DECRYPTION_ERROR_TEXT) {
+                updateContacts(loadedContacts)
+                return@launch
+            }
+
             val contact = saveContactInternal(from, UNKNOWN_CONTACT_NAME, null, CONTACT_STATUS_PENDING)
+            val uiMessage = UiMessage(messageId, from, to, text, mine = false, status = MESSAGE_STATUS_RECEIVED)
+            _uiState.update { it.copy(messages = it.messages + uiMessage) }
             saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
             updateContacts(database.contactDao().getContactsOnce())
             reloadMessages()
