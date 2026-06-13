@@ -39,6 +39,7 @@ import com.lrv.privatechat.ui.dialogs.NewChatDialog
 import com.lrv.privatechat.ui.screens.ChatDetailScreen
 import com.lrv.privatechat.ui.screens.ChatsScreen
 import com.lrv.privatechat.ui.screens.ProfileSettingsScreen
+import com.lrv.privatechat.ui.screens.QrScannerScreen
 import com.lrv.privatechat.ui.theme.PrivateChatTheme
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -258,7 +259,8 @@ class MainActivity : ComponentActivity() {
                 onDismiss = { showNewChatDialog = false },
                 onScanQr = {
                     scannedQrContent = null
-                    // TODO: abrir pantalla de escaneo QR con cámara.
+                    showNewChatDialog = false
+                    navController.navigate("scan_qr")
                 },
                 onSaveManual = { contactId, contactName, publicKey ->
                     saveContact(contactId, contactName, publicKey) { loaded -> updateContacts(loaded) }
@@ -395,6 +397,21 @@ class MainActivity : ComponentActivity() {
                         preferences.edit().putString("color", color.name).apply()
                     },
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("scan_qr") {
+                QrScannerScreen(
+                    appColor = selectedColor,
+                    onQrScanned = { qrContent ->
+                        scannedQrContent = qrContent
+                        showNewChatDialog = true
+                        navController.popBackStack()
+                    },
+                    onBack = {
+                        showNewChatDialog = true
+                        navController.popBackStack()
+                    }
                 )
             }
         }
