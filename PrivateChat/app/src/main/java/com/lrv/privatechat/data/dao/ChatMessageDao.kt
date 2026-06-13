@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ChatMessageDao {
 
+    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
+    fun observeAllMessages(): Flow<List<MessageEntity>>
+
     @Query("SELECT * FROM chat_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
     fun observeChatMessages(chatId: Long): Flow<List<MessageEntity>>
 
