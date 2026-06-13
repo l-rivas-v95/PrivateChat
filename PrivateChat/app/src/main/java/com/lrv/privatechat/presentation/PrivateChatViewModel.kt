@@ -85,25 +85,11 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         if (_uiState.value.isConnected) disconnect() else connect()
     }
 
-    fun showNewChatDialog() {
-        _uiState.update { it.copy(showNewChatDialog = true) }
-    }
-
-    fun hideNewChatDialog() {
-        _uiState.update { it.copy(showNewChatDialog = false) }
-    }
-
-    fun startQrScan() {
-        _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) }
-    }
-
-    fun onQrScanned(qrContent: String) {
-        _uiState.update { it.copy(scannedQrContent = qrContent, showNewChatDialog = true) }
-    }
-
-    fun reopenNewChatDialog() {
-        _uiState.update { it.copy(showNewChatDialog = true) }
-    }
+    fun showNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = true) } }
+    fun hideNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = false) } }
+    fun startQrScan() { _uiState.update { it.copy(scannedQrContent = null, showNewChatDialog = false) } }
+    fun onQrScanned(qrContent: String) { _uiState.update { it.copy(scannedQrContent = qrContent, showNewChatDialog = true) } }
+    fun reopenNewChatDialog() { _uiState.update { it.copy(showNewChatDialog = true) } }
 
     fun saveManualContact(contactId: String, contactName: String, publicKey: String?) {
         viewModelScope.launch {
@@ -160,12 +146,10 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
             database.chatMessageDao().deleteMessagesByChatId(chat.id)
             database.chatDao().save(chat.copy(updatedAt = System.currentTimeMillis(), lastMessagePreview = "Sin mensajes todavía"))
             _uiState.update { state ->
-                state.copy(
-                    messages = state.messages.filterNot {
-                        (it.from == state.connectedUserId && it.to == contactUsername) ||
-                            (it.from == contactUsername && it.to == state.connectedUserId)
-                    }
-                )
+                state.copy(messages = state.messages.filterNot {
+                    (it.from == state.connectedUserId && it.to == contactUsername) ||
+                        (it.from == contactUsername && it.to == state.connectedUserId)
+                })
             }
         }
     }
@@ -429,7 +413,17 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
         chats.forEach { chat ->
             val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id)
-                .map { entity -> UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus) }
+                .map { entity ->
+                    UiMessage(
+                        id = entity.messageId,
+                        from = entity.senderUsername,
+                        to = entity.receiverUsername,
+                        text = entity.body,
+                        mine = entity.isMine,
+                        timestamp = entity.timestamp,
+                        status = entity.deliveryStatus
+                    )
+                }
             loadedMessages.addAll(chatMessages)
         }
 
@@ -439,7 +433,16 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String) {
         val chat = ensureChat(contactUsername)
         database.chatMessageDao().saveChatMessage(
-            MessageEntity(message.id, chat.id, message.from, message.to, message.text, message.timestamp, message.mine, status)
+            MessageEntity(
+                messageId = message.id,
+                chatId = chat.id,
+                senderUsername = message.from,
+                receiverUsername = message.to,
+                body = message.text,
+                timestamp = message.timestamp,
+                isMine = message.mine,
+                deliveryStatus = status
+            )
         )
         database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))
     }
