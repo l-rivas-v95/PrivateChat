@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,11 +50,13 @@ fun ChatsScreen(
     isConnected: Boolean,
     appColor: AppColor,
     contacts: List<ContactEntity>,
+    pendingContacts: List<ContactEntity>,
     messages: List<UiMessage>,
     onToggleConnection: () -> Unit,
     onNewChat: () -> Unit,
     onOpenChat: (String) -> Unit,
     onDeleteConversation: (String) -> Unit,
+    onAcceptContact: (String) -> Unit,
     onOpenProfile: () -> Unit
 ) {
     var conversationToDelete by remember { mutableStateOf<ChatItemUiModel?>(null) }
@@ -136,7 +139,7 @@ fun ChatsScreen(
             }
         }
 
-        if (contacts.isEmpty()) {
+        if (contacts.isEmpty() && pendingContacts.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -149,34 +152,118 @@ fun ChatsScreen(
             }
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(contacts) { contact ->
-                    val lastMessage = messages
-                        .lastOrNull {
-                            (it.from == userId && it.to == contact.username) ||
+                if (pendingContacts.isNotEmpty()) {
+                    item {
+                        SectionTitle("Solicitudes pendientes")
+                    }
+                    items(pendingContacts) { contact ->
+                        PendingContactRow(
+                            contact = contact,
+                            appColor = appColor,
+                            onAccept = { onAcceptContact(contact.username) },
+                            onDelete = { onDeleteConversation(contact.username) }
+                        )
+                    }
+                }
+
+                if (contacts.isNotEmpty()) {
+                    item {
+                        SectionTitle("Chats")
+                    }
+                    items(contacts) { contact ->
+                        val lastMessage = messages
+                            .lastOrNull {
+                                (it.from == userId && it.to == contact.username) ||
                                     (it.from == contact.username && it.to == userId)
+                            }
+
+                        val visibleName = if (contact.displayName == contact.username) {
+                            UNKNOWN_CONTACT_NAME
+                        } else {
+                            contact.displayName
                         }
 
-                    val visibleName = if (contact.displayName == contact.username) {
-                        UNKNOWN_CONTACT_NAME
-                    } else {
-                        contact.displayName
+                        val chatItem = ChatItemUiModel(
+                            username = contact.username,
+                            displayName = visibleName,
+                            lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
+                            timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: "",
+                            avatarBase64 = contact.avatarBase64
+                        )
+
+                        ChatListRow(
+                            chatItem = chatItem,
+                            appColor = appColor,
+                            onClick = { onOpenChat(contact.username) },
+                            onLongClick = { conversationToDelete = chatItem }
+                        )
                     }
-
-                    val chatItem = ChatItemUiModel(
-                        username = contact.username,
-                        displayName = visibleName,
-                        lastMessage = lastMessage?.text ?: "Sin mensajes todavía",
-                        timeText = lastMessage?.timestamp?.let { formatChatTime(it) } ?: "",
-                        avatarBase64 = contact.avatarBase64
-                    )
-
-                    ChatListRow(
-                        chatItem = chatItem,
-                        appColor = appColor,
-                        onClick = { onOpenChat(contact.username) },
-                        onLongClick = { conversationToDelete = chatItem }
-                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = Color(0xFF666666),
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+    )
+}
+
+@Composable
+private fun PendingContactRow(
+    contact: ContactEntity,
+    appColor: AppColor,
+    onAccept: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        color = appColor.light,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AvatarView(
+                displayName = contact.displayName,
+                avatarBase64 = contact.avatarBase64,
+                appColor = appColor,
+                size = 48.dp
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = contact.displayName.ifBlank { UNKNOWN_CONTACT_NAME },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF111111)
+                )
+                Text(
+                    text = "Quiere conectar contigo",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF555555)
+                )
+            }
+
+            TextButton(onClick = onDelete) {
+                Text("Rechazar", color = Color(0xFF777777))
+            }
+            Button(
+                onClick = onAccept,
+                colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
+            ) {
+                Text("Aceptar", color = Color.White)
             }
         }
     }
