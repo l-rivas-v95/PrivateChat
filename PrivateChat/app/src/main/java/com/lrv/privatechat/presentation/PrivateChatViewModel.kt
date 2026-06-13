@@ -21,6 +21,7 @@ import com.lrv.privatechat.model.UiMessage
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.network.payload.ChatPayloadTypes
 import com.lrv.privatechat.network.payload.ChatPayloads
+import com.lrv.privatechat.notifications.ChatNotificationHelper
 import com.lrv.privatechat.util.ImageBase64Encoder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     private val keyPairManager = KeyPairManager(application)
     private val chatCryptoService: ChatCryptoService
     private val imageBase64Encoder = ImageBase64Encoder(application)
+    private val notificationHelper = ChatNotificationHelper(application)
 
     private val chatClient = ChatWebSocketClient(
         onMessageReceived = ::handleIncomingPayload,
@@ -64,6 +66,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     init {
         keyPairManager.getOrCreateKeyPair()
         chatCryptoService = ChatCryptoService(keyPairManager)
+        notificationHelper.createChannels()
         _uiState.update { it.copy(localPublicKey = keyPairManager.getPublicKeyText()) }
         reloadLocalState()
         connect()
@@ -284,10 +287,11 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update { it.copy(messages = it.messages + uiMessage) }
 
         viewModelScope.launch {
-            saveContactInternal(from, UNKNOWN_CONTACT_NAME, null, CONTACT_STATUS_PENDING)
+            val contact = saveContactInternal(from, UNKNOWN_CONTACT_NAME, null, CONTACT_STATUS_PENDING)
             saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED)
             updateContacts(database.contactDao().getContactsOnce())
             reloadMessages()
+            notificationHelper.showMessageNotification(contact.displayName, text)
         }
     }
 
