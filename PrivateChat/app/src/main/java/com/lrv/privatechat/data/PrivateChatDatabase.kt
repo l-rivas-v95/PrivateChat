@@ -19,7 +19,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
         ChatEntity::class,
         MessageEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class PrivateChatDatabase : RoomDatabase() {
@@ -39,6 +39,12 @@ abstract class PrivateChatDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE contacts ADD COLUMN status TEXT NOT NULL DEFAULT 'ACCEPTED'")
+            }
+        }
+
         fun getInstance(context: Context): PrivateChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -46,7 +52,7 @@ abstract class PrivateChatDatabase : RoomDatabase() {
                     PrivateChatDatabase::class.java,
                     "private_chat.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration(false)
                     .build()
 
