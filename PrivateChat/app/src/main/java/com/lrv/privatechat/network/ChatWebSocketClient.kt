@@ -1,5 +1,6 @@
 package com.lrv.privatechat.network
 
+import com.lrv.privatechat.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -19,7 +20,7 @@ class ChatWebSocketClient(
         previousSocket?.close(1000, "Cierre normal")
 
         val request = Request.Builder()
-            .url("ws://x:8080/chat?user=$username")
+            .url("${BuildConfig.CHAT_SERVER_URL}/chat?user=$username")
             .build()
 
         val nextSocket = client.newWebSocket(request, object : WebSocketListener() {
