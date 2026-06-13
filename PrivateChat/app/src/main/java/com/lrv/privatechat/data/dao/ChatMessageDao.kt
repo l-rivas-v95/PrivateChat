@@ -16,6 +16,12 @@ interface ChatMessageDao {
     @Query("SELECT * FROM chat_messages WHERE chatId = :chatId ORDER BY timestamp ASC")
     suspend fun getChatMessagesOnce(chatId: Long): List<MessageEntity>
 
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE chatId = :chatId AND isMine = 0 AND isRead = 0")
+    suspend fun countUnreadIncomingMessages(chatId: Long): Int
+
+    @Query("UPDATE chat_messages SET isRead = 1 WHERE chatId = :chatId AND isMine = 0")
+    suspend fun markIncomingMessagesAsRead(chatId: Long)
+
     @Query("UPDATE chat_messages SET deliveryStatus = :status WHERE messageId = :messageId")
     suspend fun updateDeliveryStatusByMessageId(messageId: String, status: String)
 
