@@ -61,24 +61,58 @@ fun ChatsScreen(
     onAcceptContact: (String) -> Unit,
     onOpenProfile: () -> Unit
 ) {
-    var conversationToDelete by remember { mutableStateOf<ChatItemUiModel?>(null) }
+    var selectedChat by remember { mutableStateOf<ChatItemUiModel?>(null) }
+    var showClearDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
-    if (conversationToDelete != null) {
+    if (selectedChat != null && !showClearDialog && !showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { conversationToDelete = null },
-            title = { Text("Borrar conversación") },
-            text = { Text("Se borrará esta conversación y sus mensajes solo en este dispositivo.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        conversationToDelete?.let { onDeleteConversation(it.username) }
-                        conversationToDelete = null
-                    }
-                ) { Text("Borrar") }
+            onDismissRequest = { selectedChat = null },
+            title = { Text(selectedChat!!.displayName) },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = { showClearDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("🗑️  Borrar mensajes", modifier = Modifier.fillMaxWidth()) }
+                    TextButton(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("❌  Eliminar contacto", color = Color(0xFFE53935), modifier = Modifier.fillMaxWidth()) }
+                }
             },
-            dismissButton = {
-                TextButton(onClick = { conversationToDelete = null }) { Text("Cancelar") }
-            }
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { selectedChat = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false; selectedChat = null },
+            title = { Text("Borrar mensajes") },
+            text = { Text("Se borrarán todos los mensajes de esta conversación solo en este dispositivo.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedChat?.let { onDeleteConversation(it.username) }
+                    showClearDialog = false; selectedChat = null
+                }) { Text("Borrar") }
+            },
+            dismissButton = { TextButton(onClick = { showClearDialog = false; selectedChat = null }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false; selectedChat = null },
+            title = { Text("Eliminar contacto") },
+            text = { Text("Se eliminará el contacto y todos sus mensajes de este dispositivo.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedChat?.let { onDeleteConversation(it.username) }
+                    showDeleteDialog = false; selectedChat = null
+                }) { Text("Eliminar", color = Color(0xFFE53935)) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false; selectedChat = null }) { Text("Cancelar") } }
         )
     }
 
@@ -172,7 +206,7 @@ fun ChatsScreen(
                             chatItem = chatItem,
                             appColor = appColor,
                             onClick = { onOpenChat(contact.username) },
-                            onLongClick = { conversationToDelete = chatItem }
+                            onLongClick = { selectedChat = chatItem }
                         )
                     }
                 }

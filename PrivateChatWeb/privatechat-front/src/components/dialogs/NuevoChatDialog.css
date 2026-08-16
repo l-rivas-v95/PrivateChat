@@ -1,0 +1,155 @@
+.nuevo-chat {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.nuevo-chat-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.nuevo-chat-cabecera h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.nuevo-chat-cerrar {
+    display: flex;
+    padding: 6px;
+    border-radius: 50%;
+    color: var(--texto-suave);
+}
+
+.nuevo-chat-cerrar:hover {
+    background: var(--fondo-hover);
+    color: var(--texto);
+}
+
+.nuevo-chat-pestanas {
+    display: flex;
+    gap: 4px;
+
+    padding: 4px;
+
+    background: var(--fondo-panel);
+    border-radius: 10px;
+}
+
+.nuevo-chat-pestanas button {
+    flex: 1;
+
+    padding: 8px;
+
+    border-radius: 8px;
+
+    color: var(--texto-suave);
+    font-size: 14px;
+
+    transition: background 0.15s, color 0.15s;
+}
+
+.nuevo-chat-pestanas button.activa {
+    background: var(--fondo-activo);
+    color: var(--texto);
+    font-weight: 500;
+}
+
+.nuevo-chat-qr {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.nuevo-chat-qr p {
+    margin: 0;
+    color: var(--texto-suave);
+    font-size: 14px;
+}
+
+.nuevo-chat-formulario {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.nuevo-chat-formulario label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    color: var(--texto-suave);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.nuevo-chat-formulario input,
+.nuevo-chat-formulario textarea {
+    padding: 11px 13px;
+
+    background: var(--fondo-panel);
+    border: 1px solid transparent;
+    border-radius: 9px;
+
+    font-size: 14px;
+    text-transform: none;
+    letter-spacing: normal;
+
+    outline: none;
+    resize: vertical;
+
+    transition: border-color 0.15s;
+}
+
+.nuevo-chat-formulario input:focus,
+.nuevo-chat-formulario textarea:focus {
+    border-color: var(--acento);
+}
+
+.nuevo-chat-formulario textarea {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    word-break: break-all;
+}
+
+.nuevo-chat-nota {
+    margin: -4px 0 0;
+    color: var(--texto-tenue);
+    font-size: 12px;
+}
+
+.nuevo-chat-boton-principal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    padding: 12px;
+
+    background: var(--acento);
+    border-radius: 24px;
+
+    color: #06231a;
+    font-size: 15px;
+    font-weight: 600;
+
+    transition: filter 0.15s;
+}
+
+.nuevo-chat-boton-principal:hover {
+    filter: brightness(1.08);
+}
+
+.nuevo-chat-aviso {
+    margin: 0;
+    padding: 10px 12px;
+
+    background: rgba(242, 97, 122, 0.12);
+    border-radius: 9px;
+
+    color: #f2617a;
+    font-size: 13px;
+}

@@ -4,6 +4,7 @@ import org.json.JSONObject
 
 object ChatPayloadTypes {
     const val MESSAGE = "message"
+    const val MEDIA_MESSAGE = "media_message"
     const val ACK = "ack"
     const val KEY_EXCHANGE = "key_exchange"
     const val CONTACT_INVITE = "contact_invite"
@@ -57,6 +58,31 @@ object ChatPayloads {
             .put("to", to)
             .put("cipherText", cipherText)
             .put("iv", iv)
+            .toString()
+    }
+
+    /**
+     * Mensaje con fichero adjunto cifrado.
+     * [fileId] es el ID devuelto por el servidor tras subir el fichero.
+     * [ivBase64] es el IV usado para cifrar el fichero (en Base64), necesario para descifrarlo.
+     * [mimeType] es el tipo MIME original del fichero (e.g. "image/jpeg", "video/mp4").
+     */
+    fun mediaMessage(
+        messageId: String,
+        from: String,
+        to: String,
+        fileId: String,
+        ivBase64: String,
+        mimeType: String
+    ): String {
+        return JSONObject()
+            .put("type", ChatPayloadTypes.MEDIA_MESSAGE)
+            .put("id", messageId)
+            .put("from", from)
+            .put("to", to)
+            .put("fileId", fileId)
+            .put("iv", ivBase64)
+            .put("mimeType", mimeType)
             .toString()
     }
 

@@ -1,0 +1,124 @@
+:root {
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* El acento lo sobrescribe App.jsx con el color elegido en el perfil */
+    --acento: #25d366;
+    --acento-oscuro: #075e54;
+    --burbuja-propia: #005c4b;
+
+    color-scheme: dark;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* ---------------------------------------------------------------- tema oscuro */
+[data-tema="oscuro"] {
+    --fondo-app: #0b141a;
+    --fondo-panel: #111b21;
+    --fondo-panel-alto: #202c33;
+    --fondo-hover: #202c33;
+    --fondo-activo: #2a3942;
+    --fondo-conversacion: #0b141a;
+    --fondo-entrada: #2a3942;
+
+    --texto: #e9edef;
+    --texto-suave: #8696a0;
+    --texto-tenue: #667781;
+
+    --borde: #222d34;
+    --borde-suave: #1f2c33;
+
+    --burbuja-entrante: #202c33;
+    --burbuja-saliente: var(--burbuja-propia);
+    --texto-burbuja: #e9edef;
+
+    --sombra: 0 2px 12px rgba(0, 0, 0, 0.45);
+    --patron-opacidad: 0.06;
+
+    color-scheme: dark;
+}
+
+/* ----------------------------------------------------------------- tema claro */
+[data-tema="claro"] {
+    --fondo-app: #d9dbd4;
+    --fondo-panel: #ffffff;
+    --fondo-panel-alto: #f0f2f5;
+    --fondo-hover: #f5f6f6;
+    --fondo-activo: #f0f2f5;
+    --fondo-conversacion: #efeae2;
+    --fondo-entrada: #ffffff;
+
+    --texto: #111b21;
+    --texto-suave: #667781;
+    --texto-tenue: #8696a0;
+
+    --borde: #e9edef;
+    --borde-suave: #f0f2f5;
+
+    --burbuja-entrante: #ffffff;
+    --burbuja-saliente: #d9fdd3;
+    --texto-burbuja: #111b21;
+
+    --sombra: 0 1px 3px rgba(11, 20, 26, 0.13);
+    --patron-opacidad: 0.4;
+
+    color-scheme: light;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--fondo-app);
+    color: var(--texto);
+    overscroll-behavior: none;
+}
+
+#root {
+    height: 100dvh;
+}
+
+button {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+input,
+textarea {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(134, 150, 160, 0.4);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(134, 150, 160, 0.7);
+}
+
+.icono {
+    display: block;
+    flex-shrink: 0;
+}

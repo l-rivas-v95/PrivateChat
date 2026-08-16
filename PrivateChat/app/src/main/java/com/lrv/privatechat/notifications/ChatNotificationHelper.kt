@@ -7,11 +7,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import com.lrv.privatechat.MainActivity
 import com.lrv.privatechat.R
 import com.lrv.privatechat.util.AppVisibilityTracker
@@ -33,7 +34,6 @@ class ChatNotificationHelper(private val context: Context) {
         ).apply {
             description = "Notificaciones de mensajes recibidos"
             enableLights(true)
-            lightColor = Color.RED
         }
 
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -54,23 +54,29 @@ class ChatNotificationHelper(private val context: Context) {
 
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            senderName.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Person + MessagingStyle: necesario para notificaciones de conversación en Android 11+
+        val sender = Person.Builder()
+            .setName(senderName)
+            .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher_round))
+            .build()
+
+        val messagingStyle = NotificationCompat.MessagingStyle(sender)
+            .addMessage(messageText, System.currentTimeMillis(), sender)
+
         val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(senderName)
-            .setContentText(messageText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setStyle(messagingStyle)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setColor(Color.RED)
-            .setColorized(true)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        NotificationManagerCompat.from(context).notify(System.currentTimeMillis().toInt(), notification)
+        // ID fijo por remitente → agrupa mensajes del mismo contacto en una sola notificación
+        NotificationManagerCompat.from(context).notify(senderName.hashCode(), notification)
     }
 }

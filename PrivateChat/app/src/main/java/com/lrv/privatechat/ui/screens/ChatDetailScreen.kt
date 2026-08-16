@@ -1,8 +1,11 @@
 package com.lrv.privatechat.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lrv.privatechat.model.AppColor
 import com.lrv.privatechat.model.UiMessage
 import com.lrv.privatechat.ui.components.AvatarView
@@ -54,13 +58,23 @@ fun ChatDetailScreen(
     onBack: () -> Unit,
     onSaveContact: (String, String?) -> Unit,
     onClearChat: () -> Unit,
+    onDeleteContact: () -> Unit,
     onDeleteMessage: (UiMessage) -> Unit,
-    onSend: (String) -> Unit
+    onSend: (String) -> Unit,
+    onAttachImage: () -> Unit = {},
+    onTakePhoto: () -> Unit = {},
+    onMicClick: () -> Unit = {},
+    onCancelRecording: () -> Unit = {},
+    isRecording: Boolean = false,
+    recordingSeconds: Int = 0,
+    isContactAccepted: Boolean = true
 ) {
     var message by remember { mutableStateOf("") }
     var showSaveContactDialog by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showClearChatDialog by remember { mutableStateOf(false) }
+    var showContactMenu by remember { mutableStateOf(false) }
+    var showDeleteContactDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(contact, messages.size, messages.lastOrNull()?.id) {
@@ -111,17 +125,47 @@ fun ChatDetailScreen(
     if (showClearChatDialog) {
         AlertDialog(
             onDismissRequest = { showClearChatDialog = false },
-            title = { Text("Vaciar chat") },
+            title = { Text("Borrar mensajes") },
             text = { Text("Se borrarán todos los mensajes de esta conversación solo en este dispositivo.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        onClearChat()
-                        showClearChatDialog = false
-                    }
-                ) { Text("Vaciar") }
+                TextButton(onClick = { onClearChat(); showClearChatDialog = false }) { Text("Borrar") }
             },
             dismissButton = { TextButton(onClick = { showClearChatDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showDeleteContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteContactDialog = false },
+            title = { Text("Eliminar contacto") },
+            text = { Text("Se eliminará el contacto y todos sus mensajes de este dispositivo.") },
+            confirmButton = {
+                TextButton(onClick = { onDeleteContact(); showDeleteContactDialog = false }) {
+                    Text("Eliminar", color = androidx.compose.ui.graphics.Color(0xFFE53935))
+                }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteContactDialog = false }) { Text("Cancelar") } }
+        )
+    }
+
+    if (showContactMenu) {
+        AlertDialog(
+            onDismissRequest = { showContactMenu = false },
+            title = { Text(contactName) },
+            text = {
+                Column {
+                    TextButton(
+                        onClick = { showContactMenu = false; showClearChatDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("🗑️  Borrar mensajes", modifier = Modifier.fillMaxWidth()) }
+                    TextButton(
+                        onClick = { showContactMenu = false; showDeleteContactDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("❌  Eliminar contacto", color = androidx.compose.ui.graphics.Color(0xFFE53935), modifier = Modifier.fillMaxWidth()) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showContactMenu = false }) { Text("Cancelar") } }
         )
     }
 
@@ -137,7 +181,7 @@ fun ChatDetailScreen(
             appColor = appColor,
             onBack = onBack,
             onEditName = { showEditNameDialog = true },
-            onClearChat = { showClearChatDialog = true },
+            onLongPress = { showContactMenu = true },
             onSaveUnknownContact = { showSaveContactDialog = true }
         )
 
@@ -156,20 +200,44 @@ fun ChatDetailScreen(
             }
         }
 
-        MessageInputBar(
-            message = message,
-            appColor = appColor,
-            onMessageChange = { message = it },
-            onSendClick = {
-                if (message.isNotBlank()) {
-                    onSend(message)
-                    message = ""
-                }
+        if (!isContactAccepted) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFFFF8E1))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "⏳ Solicitud pendiente de aceptación",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF795548)
+                )
             }
-        )
+        } else {
+            MessageInputBar(
+                message = message,
+                appColor = appColor,
+                onMessageChange = { message = it },
+                onSendClick = {
+                    if (message.isNotBlank()) {
+                        onSend(message)
+                        message = ""
+                    }
+                },
+                onAttachImage = onAttachImage,
+                onTakePhoto = onTakePhoto,
+                onMicClick = onMicClick,
+                onCancelRecording = onCancelRecording,
+                isRecording = isRecording,
+                recordingSeconds = recordingSeconds
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatHeader(
     contactName: String,
@@ -178,7 +246,7 @@ private fun ChatHeader(
     appColor: AppColor,
     onBack: () -> Unit,
     onEditName: () -> Unit,
-    onClearChat: () -> Unit,
+    onLongPress: () -> Unit,
     onSaveUnknownContact: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -195,11 +263,14 @@ private fun ChatHeader(
                     AvatarView(displayName = contactName, avatarBase64 = contactAvatarBase64, appColor = appColor, size = 42.dp)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f).clickable { onEditName() }) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .combinedClickable(onClick = onEditName, onLongClick = onLongPress)
+                ) {
                     Text(text = contactName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(text = "Toca para editar", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                    Text(text = "Mantén pulsado para opciones", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f))
                 }
-                TextButton(onClick = onClearChat) { Text("Vaciar", color = Color.White) }
             }
 
             if (isUnknownContact) {
@@ -218,33 +289,105 @@ private fun ChatHeader(
 private fun MessageInputBar(
     message: String,
     appColor: AppColor,
+    isRecording: Boolean,
+    recordingSeconds: Int,
     onMessageChange: (String) -> Unit,
     onSendClick: () -> Unit,
+    onAttachImage: () -> Unit = {},
+    onTakePhoto: () -> Unit = {},
+    onMicClick: () -> Unit = {},
+    onCancelRecording: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFFECE5DD))
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedTextField(
-            value = message,
-            onValueChange = onMessageChange,
-            placeholder = { Text("Mensaje") },
-            shape = RoundedCornerShape(28.dp),
+        // Campo con iconos dentro
+        Row(
             modifier = Modifier
                 .weight(1f)
-                .background(Color.White, RoundedCornerShape(28.dp))
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+                .background(Color.White, RoundedCornerShape(24.dp))
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isRecording) {
+                // Cancelar grabación
+                TextButton(
+                    onClick = onCancelRecording,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(40.dp)
+                ) { Text("✕", fontSize = 18.sp, color = Color(0xFF777777)) }
+                // Punto rojo
+                Box(modifier = Modifier.size(8.dp).background(Color.Red, CircleShape))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Grabando  ${recordingSeconds}s",
+                    modifier = Modifier.weight(1f).padding(vertical = 14.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF333333)
+                )
+            } else {
+                // Icono cámara
+                TextButton(
+                    onClick = onTakePhoto,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(40.dp)
+                ) { Text("📷", fontSize = 18.sp) }
+
+                // Campo texto
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = onMessageChange,
+                    placeholder = { Text("Mensaje") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = false,
+                    maxLines = 4,
+                    shape = RoundedCornerShape(0.dp),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = Color.Transparent
+                    )
+                )
+
+                // Icono adjuntar (cualquier archivo)
+                TextButton(
+                    onClick = onAttachImage,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.size(40.dp)
+                ) { Text("📎", fontSize = 18.sp) }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        // Botón derecho: enviar / micrófono / parar grabación
         Button(
-            onClick = onSendClick,
+            onClick = {
+                when {
+                    isRecording -> onMicClick()
+                    message.isNotBlank() -> onSendClick()
+                    else -> onMicClick()
+                }
+            },
             shape = CircleShape,
             modifier = Modifier.size(54.dp),
             contentPadding = PaddingValues(0.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = appColor.main)
-        ) { Text("➤", color = Color.White) }
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isRecording) Color(0xFFE53935) else appColor.main
+            )
+        ) {
+            Text(
+                text = when {
+                    isRecording -> "⏹"
+                    message.isNotBlank() -> "➤"
+                    else -> "🎤"
+                },
+                fontSize = 20.sp
+            )
+        }
     }
 }

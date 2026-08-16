@@ -1,0 +1,10 @@
+node_modules
+dist
+pruebas/.generado
+dist-ssr
+*.local
+.env
+.env.local
+.DS_Store
+.idea
+*.log

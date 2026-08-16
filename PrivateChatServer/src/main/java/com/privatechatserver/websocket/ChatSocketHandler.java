@@ -1,16 +1,17 @@
 package com.privatechatserver.websocket;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
+import com.privatechatserver.service.PendingMessageService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class ChatSocketHandler extends TextWebSocketHandler {
@@ -18,8 +19,13 @@ public class ChatSocketHandler extends TextWebSocketHandler {
     private static final int MAX_PAYLOAD_CHARS = 16_000;
 
     private final Map<String, WebSocketSession> users = new ConcurrentHashMap<>();
-    private final Map<String, List<String>> pendingMessages = new ConcurrentHashMap<>();
     private final Map<String, List<String>> pendingAcks = new ConcurrentHashMap<>();
+
+    private final PendingMessageService pendingMessageService;
+
+    public ChatSocketHandler(PendingMessageService pendingMessageService) {
+        this.pendingMessageService = pendingMessageService;
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -62,17 +68,14 @@ public class ChatSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        pendingMessages
-                .computeIfAbsent(to, key -> new ArrayList<>())
-                .add(payload);
-
-        System.out.println("Mensaje pendiente guardado para: " + to);
+        pendingMessageService.save(to, payload);
+        System.out.println("Mensaje pendiente guardado en BD para: " + to);
     }
 
     private void deliverPendingMessages(String user, WebSocketSession session) {
-        List<String> pending = pendingMessages.remove(user);
+        List<String> pending = pendingMessageService.fetchAndDelete(user);
 
-        if (pending == null) {
+        if (pending.isEmpty()) {
             return;
         }
 

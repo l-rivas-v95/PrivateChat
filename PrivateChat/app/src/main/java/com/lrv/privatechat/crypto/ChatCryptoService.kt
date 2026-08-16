@@ -78,6 +78,22 @@ class ChatCryptoService(
         }
     }
 
+    fun encryptFileBytes(data: ByteArray, contactPublicKey: String): com.lrv.privatechat.crypto.EncryptedBytes? {
+        return try {
+            val localPrivateKey = keyPairManager.getOrCreateKeyPair().private
+            val remotePublicKey = keyPairManager.decodePublicKey(contactPublicKey)
+            CryptoUtils.encryptBytes(data, localPrivateKey, remotePublicKey)
+        } catch (_: Exception) { null }
+    }
+
+    fun decryptFileBytes(cipherBytes: ByteArray, ivBytes: ByteArray, senderPublicKey: String): ByteArray? {
+        return try {
+            val localPrivateKey = keyPairManager.getOrCreateKeyPair().private
+            val remotePublicKey = keyPairManager.decodePublicKey(senderPublicKey)
+            CryptoUtils.decryptBytes(cipherBytes, ivBytes, localPrivateKey, remotePublicKey)
+        } catch (_: Exception) { null }
+    }
+
     private fun plainPayload(
         messageId: String,
         from: String,

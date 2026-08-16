@@ -52,7 +52,7 @@ fun NewChatDialog(
         text = {
             Column {
                 Text(
-                    text = "Añade el ID y, si lo tienes, la clave pública del contacto.",
+                    text = "Escanea el QR del contacto o introduce su ID manualmente.",
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -72,17 +72,6 @@ fun NewChatDialog(
                     onValueChange = { contactName = it },
                     label = { Text("Nombre para guardar") },
                     modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = publicKey,
-                    onValueChange = { publicKey = it.trim() },
-                    label = { Text("Clave pública opcional") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

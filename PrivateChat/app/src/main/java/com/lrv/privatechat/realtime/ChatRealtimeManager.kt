@@ -14,6 +14,8 @@ import com.lrv.privatechat.model.MESSAGE_STATUS_RECEIVED
 import com.lrv.privatechat.model.MESSAGE_STATUS_SENT
 import com.lrv.privatechat.model.UNKNOWN_CONTACT_NAME
 import com.lrv.privatechat.model.UiMessage
+import android.util.Base64
+import com.lrv.privatechat.network.ChatFileClient
 import com.lrv.privatechat.network.ChatWebSocketClient
 import com.lrv.privatechat.network.payload.ChatPayloadTypes
 import com.lrv.privatechat.network.payload.ChatPayloads
@@ -94,6 +96,7 @@ class ChatRealtimeManager private constructor(private val application: Applicati
             ChatPayloadTypes.CONTACT_ACCEPT -> handleContactAccept(received, from)
             ChatPayloadTypes.KEY_EXCHANGE -> handleLegacyKeyExchange(received, from)
             ChatPayloadTypes.PROFILE_AVATAR -> handleProfileAvatar(received, from)
+            ChatPayloadTypes.MEDIA_MESSAGE -> handleMediaMessage(received, from)
             else -> handleChatMessage(received, from)
         }
     }
@@ -160,6 +163,41 @@ class ChatRealtimeManager private constructor(private val application: Applicati
         }
     }
 
+    private fun handleMediaMessage(received: String, from: String) {
+        val to = ChatPayloads.value(received, "to")
+        val messageId = ChatPayloads.value(received, "id").ifBlank { UUID.randomUUID().toString() }
+        val fileId = ChatPayloads.value(received, "fileId")
+        val ivBase64 = ChatPayloads.value(received, "iv")
+        val mimeType = ChatPayloads.value(received, "mimeType").ifBlank { "application/octet-stream" }
+        if (from.isBlank() || fileId.isBlank() || ivBase64.isBlank()) return
+
+        scope.launch {
+            mutex.withLock {
+                val cipherBytes = ChatFileClient.download(fileId) ?: return@withLock
+                val contacts = database.contactDao().getContactsOnce()
+                val contactPublicKey = contacts.firstOrNull { it.username == from }?.publicKey ?: return@withLock
+                val ivBytes = Base64.decode(ivBase64, Base64.NO_WRAP)
+                val plainBytes = chatCryptoService.decryptFileBytes(cipherBytes, ivBytes, contactPublicKey) ?: return@withLock
+
+                val ext = mimeType.substringAfter("/").substringBefore(";").takeIf { it.isNotBlank() } ?: "bin"
+                val mediaDir = java.io.File(application.filesDir, "media").also { it.mkdirs() }
+                val mediaFile = java.io.File(mediaDir, "$messageId.$ext")
+                mediaFile.writeBytes(plainBytes)
+
+                val contact = saveContactInternal(from, UNKNOWN_CONTACT_NAME, null, CONTACT_STATUS_PENDING)
+                val uiMessage = UiMessage(
+                    id = messageId, from = from, to = to,
+                    text = "📎 Archivo adjunto",
+                    mine = false, status = MESSAGE_STATUS_RECEIVED,
+                    mediaLocalPath = mediaFile.absolutePath, mimeType = mimeType
+                )
+                saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED, isRead = false)
+                notificationHelper.showMessageNotification(contact.displayName, "📎 Archivo adjunto")
+            }
+            notifyDataChanged()
+        }
+    }
+
     private fun handleChatMessage(received: String, from: String) {
         val to = ChatPayloads.value(received, "to")
         val messageId = ChatPayloads.value(received, "id").ifBlank { UUID.randomUUID().toString() }
@@ -176,6 +214,36 @@ class ChatRealtimeManager private constructor(private val application: Applicati
                 saveMessageToDatabaseInternal(uiMessage, from, MESSAGE_STATUS_RECEIVED, isRead = false)
                 notificationHelper.showMessageNotification(contact.displayName, text)
             }
+            notifyDataChanged()
+        }
+    }
+
+    fun sendMediaFile(to: String, fileBytes: ByteArray, mimeType: String) {
+        val from = currentUserId ?: return
+        scope.launch {
+            val contact = database.contactDao().findByUsername(to) ?: return@launch
+            val contactPublicKey = contact.publicKey ?: return@launch
+            val encrypted = chatCryptoService.encryptFileBytes(fileBytes, contactPublicKey) ?: return@launch
+            val fileId = ChatFileClient.upload(to, encrypted.cipherBytes) ?: return@launch
+            val messageId = UUID.randomUUID().toString()
+            val ivBase64 = Base64.encodeToString(encrypted.iv, Base64.NO_WRAP)
+            val payload = ChatPayloads.mediaMessage(messageId, from, to, fileId, ivBase64, mimeType)
+            chatClient.send(payload)
+
+            // Guardar copia local para mostrar miniatura en el chat
+            val ext = mimeType.substringAfter("/").substringBefore(";").takeIf { it.isNotBlank() } ?: "bin"
+            val mediaDir = java.io.File(application.filesDir, "media").also { it.mkdirs() }
+            val mediaFile = java.io.File(mediaDir, "$messageId.$ext")
+            mediaFile.writeBytes(fileBytes)
+
+            val uiMessage = UiMessage(
+                id = messageId, from = from, to = to,
+                text = "📎 Archivo adjunto",
+                mine = true, status = MESSAGE_STATUS_SENT,
+                mimeType = mimeType,
+                mediaLocalPath = mediaFile.absolutePath
+            )
+            saveMessageToDatabaseInternal(uiMessage, to, MESSAGE_STATUS_SENT, isRead = true)
             notifyDataChanged()
         }
     }
@@ -277,7 +345,9 @@ class ChatRealtimeManager private constructor(private val application: Applicati
                 timestamp = message.timestamp,
                 isMine = message.mine,
                 deliveryStatus = status,
-                isRead = isRead
+                isRead = isRead,
+                mediaLocalPath = message.mediaLocalPath,
+                mimeType = message.mimeType
             )
         )
         database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))

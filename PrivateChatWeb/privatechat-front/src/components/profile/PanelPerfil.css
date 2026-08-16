@@ -1,0 +1,289 @@
+.panel-perfil {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+
+    display: flex;
+    flex-direction: column;
+
+    background: var(--fondo-panel);
+
+    animation: panel-perfil-entrar 0.18s ease-out;
+}
+
+@keyframes panel-perfil-entrar {
+    from {
+        transform: translateX(-14px);
+        opacity: 0;
+    }
+}
+
+.panel-perfil-cabecera {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+
+    flex-shrink: 0;
+    padding: 22px 18px 14px;
+
+    background: var(--fondo-panel-alto);
+}
+
+.panel-perfil-cabecera button {
+    display: flex;
+    color: var(--texto);
+}
+
+.panel-perfil-cabecera h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.panel-perfil-cuerpo {
+    flex: 1;
+    overflow-y: auto;
+
+    padding-bottom: 30px;
+}
+
+/* -------------------------------------------------------------------- avatar */
+
+.panel-perfil-avatar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    padding: 26px 22px;
+}
+
+.panel-perfil-avatar-acciones {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-perfil-avatar-acciones button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+
+    padding: 8px 16px;
+
+    background: var(--fondo-panel-alto);
+    border-radius: 20px;
+
+    color: var(--acento);
+    font-size: 13.5px;
+    font-weight: 500;
+}
+
+.panel-perfil-avatar-acciones button:hover {
+    background: var(--fondo-activo);
+}
+
+.panel-perfil-avatar-acciones button.tenue {
+    color: var(--texto-suave);
+}
+
+/* -------------------------------------------------------------------- bloques */
+
+.panel-perfil-bloque {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+
+    padding: 16px 22px;
+
+    border-top: 1px solid var(--borde-suave);
+}
+
+.panel-perfil-etiqueta {
+    color: var(--acento);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+.panel-perfil-campo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--borde);
+
+    color: var(--texto-suave);
+}
+
+.panel-perfil-campo input {
+    flex: 1;
+    min-width: 0;
+
+    background: none;
+    border: none;
+    outline: none;
+
+    font-size: 15.5px;
+}
+
+.panel-perfil-nota {
+    margin: 0;
+    color: var(--texto-tenue);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.panel-perfil-aviso {
+    margin: 0 22px;
+    padding: 10px 12px;
+
+    background: rgba(242, 97, 122, 0.12);
+    border-radius: 9px;
+
+    color: #f2617a;
+    font-size: 13px;
+}
+
+.panel-perfil-qr {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+}
+
+.panel-perfil-copiable {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    width: 100%;
+    padding: 11px 13px;
+
+    background: var(--fondo-panel-alto);
+    border-radius: 9px;
+
+    text-align: left;
+}
+
+.panel-perfil-copiable:hover:not(:disabled) {
+    background: var(--fondo-activo);
+}
+
+.panel-perfil-copiable span {
+    flex: 1;
+    min-width: 0;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+}
+
+.panel-perfil-copiable.clave span {
+    white-space: normal;
+    word-break: break-all;
+
+    max-height: 62px;
+    overflow: hidden;
+
+    font-size: 10.5px;
+    line-height: 1.4;
+}
+
+.panel-perfil-copiable small {
+    flex-shrink: 0;
+    color: var(--acento);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* -------------------------------------------------------------------- colores */
+
+.panel-perfil-colores {
+    display: flex;
+    gap: 12px;
+}
+
+.panel-perfil-color {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 36px;
+    height: 36px;
+
+    border-radius: 50%;
+
+    color: #06231a;
+
+    transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.panel-perfil-color:hover {
+    transform: scale(1.08);
+}
+
+.panel-perfil-color.activo {
+    box-shadow: 0 0 0 3px var(--fondo-panel), 0 0 0 5px currentColor;
+}
+
+/* ------------------------------------------------------------- interruptores */
+
+.panel-perfil-interruptores {
+    display: flex;
+    gap: 6px;
+
+    padding: 4px;
+
+    background: var(--fondo-panel-alto);
+    border-radius: 10px;
+}
+
+.panel-perfil-interruptores button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+
+    flex: 1;
+    padding: 9px;
+
+    border-radius: 8px;
+
+    color: var(--texto-suave);
+    font-size: 13.5px;
+}
+
+.panel-perfil-interruptores button.activo {
+    background: var(--fondo-activo);
+    color: var(--texto);
+    font-weight: 500;
+}
+
+.panel-perfil-conexion,
+.panel-perfil-secundario {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+
+    padding: 11px 14px;
+
+    background: var(--fondo-panel-alto);
+    border-radius: 9px;
+
+    color: var(--texto-suave);
+    font-size: 13.5px;
+    text-align: left;
+}
+
+.panel-perfil-conexion.conectado {
+    color: var(--acento);
+}
+
+.panel-perfil-conexion:hover,
+.panel-perfil-secundario:hover {
+    background: var(--fondo-activo);
+}

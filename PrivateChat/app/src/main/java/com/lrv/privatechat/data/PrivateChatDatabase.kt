@@ -19,7 +19,7 @@ import com.lrv.privatechat.data.entity.MessageEntity
         ChatEntity::class,
         MessageEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class PrivateChatDatabase : RoomDatabase() {
@@ -52,6 +52,13 @@ abstract class PrivateChatDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN mediaLocalPath TEXT")
+                database.execSQL("ALTER TABLE chat_messages ADD COLUMN mimeType TEXT")
+            }
+        }
+
         fun getInstance(context: Context): PrivateChatDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -59,7 +66,7 @@ abstract class PrivateChatDatabase : RoomDatabase() {
                     PrivateChatDatabase::class.java,
                     "private_chat.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration(false)
                     .build()
 

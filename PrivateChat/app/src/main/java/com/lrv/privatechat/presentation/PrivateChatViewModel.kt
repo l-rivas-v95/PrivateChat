@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import com.lrv.privatechat.crypto.ChatCryptoService
 import com.lrv.privatechat.crypto.KeyPairManager
 import com.lrv.privatechat.data.PrivateChatDatabase
@@ -95,7 +96,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             database.chatMessageDao().observeAllMessages().collect { messages ->
                 val loadedMessages = messages.map { entity ->
-                    UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus)
+                    UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus, entity.mediaLocalPath, entity.mimeType)
                 }.sortedBy { it.timestamp }
                 _uiState.update { it.copy(messages = loadedMessages) }
                 updateContacts(database.contactDao().getContactsOnce())
@@ -170,6 +171,8 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
                 database.chatMessageDao().deleteMessagesByChatId(chat.id)
                 database.chatDao().deleteChatByContact(contactUsername)
             }
+            // Borra el contacto y su clave pública → la clave compartida ya no se puede derivar
+            database.contactDao().deleteByUsername(contactUsername)
             _uiState.update { state -> state.copy(contacts = state.contacts.filterNot { it.username == contactUsername }, messages = state.messages.filterNot { (it.from == state.connectedUserId && it.to == contactUsername) || (it.from == contactUsername && it.to == state.connectedUserId) }, unreadCounts = state.unreadCounts - contactUsername) }
         }
     }
@@ -222,6 +225,19 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
     fun updateColor(color: AppColor) {
         preferences.edit().putString("color", color.name).apply()
         _uiState.update { it.copy(selectedColor = color) }
+    }
+
+    fun sendMediaMessage(contactUsername: String, uri: Uri, mimeTypeOverride: String? = null) {
+        val state = _uiState.value
+        val contact = state.contacts.firstOrNull { it.username == contactUsername } ?: return
+        if (contact.publicKey.isNullOrBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val contentResolver = getApplication<Application>().contentResolver
+            val mimeType = mimeTypeOverride ?: contentResolver.getType(uri) ?: "application/octet-stream"
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@launch
+            realtimeManager.sendMediaFile(contactUsername, bytes, mimeType)
+        }
     }
 
     fun updateAvatar(uri: Uri) {
@@ -411,7 +427,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
         val chats = database.chatDao().getAllChatsOnce()
         val loadedMessages = mutableListOf<UiMessage>()
         chats.forEach { chat ->
-            val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id).map { entity -> UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus) }
+            val chatMessages = database.chatMessageDao().getChatMessagesOnce(chat.id).map { entity -> UiMessage(entity.messageId, entity.senderUsername, entity.receiverUsername, entity.body, entity.isMine, entity.timestamp, entity.deliveryStatus, entity.mediaLocalPath, entity.mimeType) }
             loadedMessages.addAll(chatMessages)
         }
         return loadedMessages.sortedBy { it.timestamp }
@@ -419,7 +435,7 @@ class PrivateChatViewModel(application: Application) : AndroidViewModel(applicat
 
     private suspend fun saveMessageToDatabaseInternal(message: UiMessage, contactUsername: String, status: String, isRead: Boolean) {
         val chat = ensureChat(contactUsername)
-        database.chatMessageDao().saveChatMessage(MessageEntity(messageId = message.id, chatId = chat.id, senderUsername = message.from, receiverUsername = message.to, body = message.text, timestamp = message.timestamp, isMine = message.mine, deliveryStatus = status, isRead = isRead))
+        database.chatMessageDao().saveChatMessage(MessageEntity(messageId = message.id, chatId = chat.id, senderUsername = message.from, receiverUsername = message.to, body = message.text, timestamp = message.timestamp, isMine = message.mine, deliveryStatus = status, isRead = isRead, mediaLocalPath = message.mediaLocalPath, mimeType = message.mimeType))
         database.chatDao().save(chat.copy(updatedAt = message.timestamp, lastMessagePreview = message.text))
     }
 

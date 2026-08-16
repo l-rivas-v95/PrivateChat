@@ -15,5 +15,8 @@ data class MessageEntity(
     val timestamp: Long,
     val isMine: Boolean,
     val deliveryStatus: String,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // Para mensajes con fichero adjunto (null en mensajes de texto)
+    val mediaLocalPath: String? = null,
+    val mimeType: String? = null
 )

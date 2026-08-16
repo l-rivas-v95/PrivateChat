@@ -1,0 +1,74 @@
+.escaner-qr {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.escaner-qr-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.escaner-qr-cabecera h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.escaner-qr-cerrar {
+    display: flex;
+    padding: 6px;
+    border-radius: 50%;
+    color: var(--texto-suave);
+}
+
+.escaner-qr-cerrar:hover {
+    background: var(--fondo-hover);
+    color: var(--texto);
+}
+
+.escaner-qr-visor {
+    position: relative;
+
+    width: 100%;
+    aspect-ratio: 1;
+
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.escaner-qr-visor video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.escaner-qr-marco {
+    position: absolute;
+    inset: 16%;
+
+    border: 3px solid var(--acento);
+    border-radius: 16px;
+
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+}
+
+.escaner-qr-pista {
+    margin: 0;
+    color: var(--texto-suave);
+    font-size: 13px;
+    text-align: center;
+}
+
+.escaner-qr-error {
+    margin: 0;
+    padding: 14px;
+
+    background: rgba(242, 97, 122, 0.12);
+    border-radius: 10px;
+
+    color: #f2617a;
+    font-size: 13px;
+}

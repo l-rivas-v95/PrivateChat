@@ -16,6 +16,11 @@ data class EncryptedMessage(
     val iv: String
 )
 
+data class EncryptedBytes(
+    val cipherBytes: ByteArray,
+    val iv: ByteArray
+)
+
 object CryptoUtils {
 
     private const val AES_ALGORITHM = "AES"
@@ -57,6 +62,37 @@ object CryptoUtils {
         cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, ivBytes))
 
         return String(cipher.doFinal(cipherBytes), Charsets.UTF_8)
+    }
+
+    fun encryptBytes(
+        data: ByteArray,
+        privateKey: PrivateKey,
+        publicKey: PublicKey
+    ): EncryptedBytes {
+        val secretKey = deriveAesKey(privateKey, publicKey)
+        val iv = Random.nextBytes(IV_SIZE_BYTES)
+
+        val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+
+        return EncryptedBytes(
+            cipherBytes = cipher.doFinal(data),
+            iv = iv
+        )
+    }
+
+    fun decryptBytes(
+        cipherBytes: ByteArray,
+        iv: ByteArray,
+        privateKey: PrivateKey,
+        publicKey: PublicKey
+    ): ByteArray {
+        val secretKey = deriveAesKey(privateKey, publicKey)
+
+        val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+
+        return cipher.doFinal(cipherBytes)
     }
 
     private fun deriveAesKey(privateKey: PrivateKey, publicKey: PublicKey): SecretKey {
