@@ -86,8 +86,7 @@
     letter-spacing: 0.4px;
 }
 
-.nuevo-chat-formulario input,
-.nuevo-chat-formulario textarea {
+.nuevo-chat-formulario input {
     padding: 11px 13px;
 
     background: var(--fondo-panel);
@@ -99,26 +98,35 @@
     letter-spacing: normal;
 
     outline: none;
-    resize: vertical;
 
     transition: border-color 0.15s;
 }
 
-.nuevo-chat-formulario input:focus,
-.nuevo-chat-formulario textarea:focus {
+.nuevo-chat-formulario input:focus {
     border-color: var(--acento);
-}
-
-.nuevo-chat-formulario textarea {
-    font-family: ui-monospace, Consolas, monospace;
-    font-size: 12px;
-    word-break: break-all;
 }
 
 .nuevo-chat-nota {
     margin: -4px 0 0;
     color: var(--texto-tenue);
     font-size: 12px;
+    line-height: 1.5;
+}
+
+.nuevo-chat-clave-ok {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+
+    margin: -4px 0 0;
+    padding: 9px 11px;
+
+    background: rgba(37, 211, 102, 0.1);
+    border-radius: 8px;
+
+    color: var(--acento);
+    font-size: 12.5px;
+    line-height: 1.45;
 }
 
 .nuevo-chat-boton-principal {

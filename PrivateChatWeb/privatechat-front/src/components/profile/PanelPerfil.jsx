@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { COLORES_APP, ESTADO_CONEXION_CONECTADO } from "../../config/constantes";
 import { contactoQr } from "../../services/payloadService";
+import { formatearBytes } from "../../utils/almacenamiento";
 import Avatar from "../common/Avatar";
 import CodigoQr from "../common/CodigoQr";
 import Icono from "../common/Icono";
@@ -16,6 +17,8 @@ function PanelPerfil({
     tema,
     estadoConexion,
     permisoNotificaciones,
+    almacenamiento,
+    instalacion,
     onCerrar,
     onCambiarNombre,
     onCambiarColor,
@@ -118,14 +121,15 @@ function PanelPerfil({
                     <label className="panel-perfil-etiqueta">Tu código QR</label>
                     <div className="panel-perfil-qr">
                         {contenidoQr ? (
-                            <CodigoQr contenido={contenidoQr} tamano={220} />
+                            <CodigoQr contenido={contenidoQr} />
                         ) : (
                             <p className="panel-perfil-nota">Generando claves...</p>
                         )}
                     </div>
                     <p className="panel-perfil-nota">
                         Contiene tu identificador, tu nombre y tu clave pública. Que lo escaneen
-                        desde <strong>Nuevo chat</strong>.
+                        desde <strong>Nuevo chat</strong>. Si cuesta leerlo, púlsalo para verlo a
+                        pantalla completa.
                     </p>
                 </section>
 
@@ -219,13 +223,82 @@ function PanelPerfil({
                             Activar avisos del navegador
                         </button>
                         <p className="panel-perfil-nota">
-                            Solo se muestran cuando la pestaña no está en primer plano.
+                            Solo se muestran cuando la pestaña no está en primer plano. Concederlo
+                            también ayuda a que el navegador conserve tus datos.
                         </p>
                     </section>
                 )}
+
+                <section className="panel-perfil-bloque">
+                    <label className="panel-perfil-etiqueta">Aplicación</label>
+
+                    {instalacion.estado === "disponible" && (
+                        <button
+                            type="button"
+                            className="panel-perfil-secundario destacado"
+                            onClick={instalacion.instalar}
+                        >
+                            <Icono nombre="descargar" tamano={18} />
+                            Instalar en este dispositivo
+                        </button>
+                    )}
+
+                    {instalacion.estado === "instalada" && (
+                        <p className="panel-perfil-estado ok">
+                            <Icono nombre="check" tamano={15} />
+                            Instalada como aplicación
+                        </p>
+                    )}
+
+                    {instalacion.estado === "manual" && (
+                        <p className="panel-perfil-nota">
+                            Para instalarla en iOS: botón Compartir → <strong>Añadir a pantalla de
+                            inicio</strong>. Además de tener icono propio, evita que Safari borre
+                            tus conversaciones a los 7 días sin abrirla.
+                        </p>
+                    )}
+
+                    {instalacion.estado === "no-disponible" && (
+                        <p className="panel-perfil-nota">
+                            Este navegador no ofrece instalarla, o ya la tienes instalada.
+                        </p>
+                    )}
+
+                    <p
+                        className={`panel-perfil-estado ${almacenamiento.estado === "concedido" ? "ok" : "aviso"}`}
+                    >
+                        <Icono
+                            nombre={almacenamiento.estado === "concedido" ? "candado" : "aviso"}
+                            tamano={15}
+                        />
+                        {textoAlmacenamiento(almacenamiento)}
+                    </p>
+
+                    <p className="panel-perfil-nota">
+                        Tu clave privada se guarda como clave no exportable del navegador: se puede
+                        usar para descifrar, pero no hay forma de leerla ni de copiarla. Si borras
+                        los datos del sitio, se pierde junto con las conversaciones.
+                    </p>
+                </section>
             </div>
         </div>
     );
+}
+
+function textoAlmacenamiento(almacenamiento) {
+    const espacio =
+        almacenamiento.usado !== undefined ? ` · ${formatearBytes(almacenamiento.usado)} usados` : "";
+
+    switch (almacenamiento.estado) {
+        case "concedido":
+            return `Almacenamiento persistente activo${espacio}`;
+        case "denegado":
+            return `El navegador podría borrar los datos si le falta espacio${espacio}`;
+        case "comprobando":
+            return "Comprobando el almacenamiento...";
+        default:
+            return `Este navegador no permite fijar el almacenamiento${espacio}`;
+    }
 }
 
 export default PanelPerfil;

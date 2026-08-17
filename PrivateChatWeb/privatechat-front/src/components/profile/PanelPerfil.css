@@ -287,3 +287,37 @@
 .panel-perfil-secundario:hover {
     background: var(--fondo-activo);
 }
+
+.panel-perfil-secundario.destacado {
+    justify-content: center;
+
+    background: var(--acento);
+    border-radius: 22px;
+
+    color: #06231a;
+    font-weight: 600;
+    text-align: center;
+}
+
+.panel-perfil-secundario.destacado:hover {
+    background: var(--acento);
+    filter: brightness(1.08);
+}
+
+.panel-perfil-estado {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+
+    margin: 0;
+
+    font-size: 12.5px;
+}
+
+.panel-perfil-estado.ok {
+    color: var(--acento);
+}
+
+.panel-perfil-estado.aviso {
+    color: #e8912d;
+}

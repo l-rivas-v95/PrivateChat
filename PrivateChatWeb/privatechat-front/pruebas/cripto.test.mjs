@@ -93,8 +93,10 @@ function descifrarEstiloJava(cipherTextBase64, ivBase64, pkcs8Base64, spkiBase64
 
 console.log("\nInteroperabilidad cripto front React <-> app Android\n");
 
-const alice = await generarParClaves();
-const bob = await generarParClaves();
+// Exportables solo para poder compararlas contra el lado Java en estas pruebas.
+// La app real las genera con generarParClaves(false); eso se prueba al final.
+const alice = await generarParClaves(true);
+const bob = await generarParClaves(true);
 
 const alicePub = await exportarClavePublica(alice.publicKey);
 const alicePriv = await exportarClavePrivada(alice.privateKey);
@@ -200,6 +202,59 @@ comprobar(
     "una clave privada guardada y reimportada desde localStorage sigue sirviendo",
     descifrarEstiloJava(cifradoReimportado.cipherText, cifradoReimportado.iv, bobPriv, alicePub) ===
         "reimportada"
+);
+
+// ------------------------------------------------ claves NO exportables (app real)
+
+console.log("\nClave privada no exportable (lo que usa la app)\n");
+
+const seguro = await generarParClaves(false);
+const seguroPub = await exportarClavePublica(seguro.publicKey);
+
+comprobar(
+    "la pública sigue exportándose aunque el par sea no exportable",
+    Buffer.from(seguroPub, "base64").length === 91
+);
+
+comprobar(
+    "la privada NO se puede exportar: no hay forma de sacarla del navegador",
+    await (async () => {
+        try {
+            await exportarClavePrivada(seguro.privateKey);
+            return false;
+        } catch {
+            return true;
+        }
+    })()
+);
+
+comprobar("el flag extractable está a false", seguro.privateKey.extractable === false);
+
+const cifradoSeguro = await cifrarTexto(
+    "mensaje con clave blindada",
+    seguro.privateKey,
+    await importarClavePublica(bobPub)
+);
+
+comprobar(
+    "y aun así descifra y cifra igual que antes",
+    descifrarEstiloJava(cifradoSeguro.cipherText, cifradoSeguro.iv, bobPriv, seguroPub) ===
+        "mensaje con clave blindada"
+);
+
+const migrada = await importarClavePrivada(alicePriv, false);
+
+comprobar(
+    "una clave antigua de localStorage se puede reimportar como no exportable (migración)",
+    migrada.extractable === false
+);
+
+comprobar(
+    "y conserva la identidad: sigue derivando el mismo secreto que antes",
+    await (async () => {
+        const cifrado = await cifrarTexto("misma identidad", migrada, await importarClavePublica(bobPub));
+        return descifrarEstiloJava(cifrado.cipherText, cifrado.iv, bobPriv, alicePub) === "misma identidad";
+    })()
 );
 
 console.log(fallos === 0 ? "\nTodas las pruebas pasan.\n" : `\n${fallos} prueba(s) fallidas.\n`);

@@ -6,6 +6,9 @@ import "./EscanerQr.css";
 /**
  * Lee el QR con la cámara del navegador.
  * Necesita contexto seguro (https o localhost), igual que WebCrypto.
+ *
+ * No se le imponen restricciones de resolución a propósito: pedirlas empeoraba
+ * el enfoque de cerca, que es lo que hace falta para leer un QR de una pantalla.
  */
 function EscanerQr({ onLeido, onCerrar }) {
     const videoRef = useRef(null);
@@ -123,7 +126,9 @@ function EscanerQr({ onLeido, onCerrar }) {
                 </div>
             )}
 
-            <p className="escaner-qr-pista">Apunta al QR que aparece en el perfil del otro dispositivo.</p>
+            <p className="escaner-qr-pista">
+                Apunta al QR que aparece en el perfil del otro dispositivo.
+            </p>
             <canvas ref={lienzoRef} hidden />
         </div>
     );

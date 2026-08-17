@@ -53,7 +53,7 @@ pantalla si detecta que no está en un contexto seguro.
 
 | App Android | Web |
 | --- | --- |
-| `KeyPairManager` (SharedPreferences) | `crypto/keyPairManager.js` (localStorage) |
+| `KeyPairManager` (SharedPreferences) | `crypto/keyPairManager.js` (CryptoKey no exportable en IndexedDB) |
 | `CryptoUtils` (JCE) | `crypto/cryptoUtils.js` (WebCrypto) |
 | `ChatCryptoService` | `crypto/chatCryptoService.js` |
 | `ChatPayloads` | `services/payloadService.js` |
@@ -92,18 +92,56 @@ implementación equivalente a la de la JCE (y al revés), además de verificar q
 todos los payloads JSON llevan exactamente los campos que leen
 `ChatSocketHandler.java` y `ChatPayloads.kt`.
 
-## Diferencias con la app Android
+## Dónde se guarda la identidad
+
+El `userId` es un UUID que se genera la primera vez que se abre la app y vive en
+`localStorage`, igual que en las `SharedPreferences` de Android.
+
+Las **claves ECDH no**. Se generan con `extractable: false` y se guardan como
+objetos `CryptoKey` dentro de IndexedDB. El navegador las conserva entre
+recargas y las deja usar para derivar el secreto compartido, pero no existe
+ninguna forma de convertirlas de nuevo en bytes: ni `exportKey`, ni este código,
+ni ningún script inyectado en la página. En Android la protección la daba el
+sandbox de la app; aquí la da el propio navegador.
+
+Si vienes de una versión anterior que las guardaba en Base64 en `localStorage`,
+se migran solas al arrancar (reimportadas ya como no exportables) y se borra la
+copia en claro. No se pierde la identidad ni los contactos.
+
+La contrapartida: **no se puede hacer copia de seguridad de la identidad**. Si se
+borran los datos del sitio, se pierde, y con ella los mensajes antiguos, porque
+el secreto compartido ya no se puede derivar.
+
+## PWA
+
+La app es instalable. En Chrome y Edge aparece un botón *Instalar en este
+dispositivo* dentro de Perfil y ajustes; en iOS hay que hacerlo desde
+Compartir → Añadir a pantalla de inicio.
+
+Instalarla da tres cosas: ventana propia sin barra del navegador, arranque sin
+red gracias a la caché del `service worker`, y sobre todo **almacenamiento
+persistente**, que impide que el navegador desaloje los datos y esquiva el
+borrado a los 7 días que aplica Safari a las webs que no se visitan.
+
+El service worker (`public/sw.js`) solo cachea el cascarón: HTML, JS, CSS e
+iconos. `/chat`, `/upload` y `/file` quedan explícitamente fuera. Solo se
+registra en la build de producción, así que para probarlo en local hay que hacer
+`npm run build` y luego `npm run preview`.
+
+**Lo que la PWA no arregla**: seguir recibiendo mensajes con la app cerrada. Eso
+necesita Web Push, y Web Push necesita que el servidor guarde suscripciones y
+mande las notificaciones con claves VAPID. Es lo único que hoy sigue haciendo
+mejor el APK.
+
+## Otras diferencias con la app Android
 
 - **Sin servicio en segundo plano.** El navegador cierra el WebSocket al dormir
   la pestaña. El cliente reconecta solo (con backoff) y al volver a primer plano,
-  y el servidor entrega los mensajes pendientes al reconectar. Aun así, con la
-  pestaña cerrada no llega nada.
+  y el servidor entrega los mensajes pendientes al reconectar.
 - **Notificaciones del navegador** en lugar de notificaciones nativas, y solo
   cuando la pestaña no está visible.
 - **Los adjuntos se guardan como `Blob` en IndexedDB**, no como ficheros en
   disco. Recuerda que el servidor borra el fichero en la primera descarga.
-- **Las claves viven en `localStorage`.** Borrar los datos del sitio equivale a
-  desinstalar la app: se pierden la identidad y las conversaciones.
 - Cada navegador es una identidad distinta, igual que cada instalación de la app
   genera su propio `userId`.
 

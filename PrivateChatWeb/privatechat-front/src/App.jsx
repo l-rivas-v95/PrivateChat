@@ -6,6 +6,7 @@ import NuevoChatDialog from "./components/dialogs/NuevoChatDialog";
 import PanelPerfil from "./components/profile/PanelPerfil";
 import ListaChats from "./components/sidebar/ListaChats";
 import { hayCryptoDisponible } from "./crypto/cryptoUtils";
+import { useInstalacionPwa } from "./hooks/useInstalacionPwa";
 import { usePrivateChat } from "./hooks/usePrivateChat";
 import "./App.css";
 
@@ -13,6 +14,7 @@ const CLAVE_TEMA = "private_chat_tema";
 
 function App() {
     const chat = usePrivateChat();
+    const instalacion = useInstalacionPwa();
 
     const [contactoActivo, setContactoActivo] = useState(null);
     const [perfilAbierto, setPerfilAbierto] = useState(false);
@@ -103,6 +105,8 @@ function App() {
                     tema={tema}
                     estadoConexion={chat.estadoConexion}
                     permisoNotificaciones={chat.permisoNotificaciones}
+                    almacenamiento={chat.almacenamiento}
+                    instalacion={instalacion}
                     onCerrar={() => setPerfilAbierto(false)}
                     onCambiarNombre={chat.actualizarNombreLocal}
                     onCambiarColor={chat.actualizarColor}
@@ -148,6 +152,7 @@ function App() {
 
             <NuevoChatDialog
                 abierto={nuevoChatAbierto}
+                userIdLocal={chat.userIdLocal}
                 onCerrar={() => setNuevoChatAbierto(false)}
                 onGuardar={async (userId, nombre, clavePublica) => {
                     await chat.guardarContactoManual(userId, nombre, clavePublica);
@@ -156,10 +161,15 @@ function App() {
                 }}
             />
 
-            {chat.errorCripto && (
+            {(chat.errorCripto || chat.aviso) && (
                 <p className="app-banner-error">
                     <Icono nombre="aviso" tamano={16} />
-                    {chat.errorCripto}
+                    {chat.errorCripto || chat.aviso}
+                    {!chat.errorCripto && (
+                        <button type="button" onClick={chat.descartarAviso} aria-label="Descartar">
+                            <Icono nombre="cerrar" tamano={15} />
+                        </button>
+                    )}
                 </p>
             )}
         </div>

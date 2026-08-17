@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { importarClavePublica } from "../../crypto/cryptoUtils";
 import { parsearContactoQr } from "../../services/payloadService";
 import Icono from "../common/Icono";
 import EscanerQr from "./EscanerQr";
@@ -8,7 +9,14 @@ import "./NuevoChatDialog.css";
 const PESTANA_QR = "qr";
 const PESTANA_MANUAL = "manual";
 
-function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
+/**
+ * Para dar de alta un contacto solo hace falta su identificador.
+ *
+ * La clave pública nunca se pide: o llega en el QR, o la manda el propio
+ * contacto al aceptar la invitación (`contact_accept`). Pedirla a mano
+ * significaba copiar dos cadenas larguísimas en vez de una.
+ */
+function NuevoChatDialog({ abierto, userIdLocal, onCerrar, onGuardar }) {
     const [pestana, setPestana] = useState(PESTANA_QR);
     const [escaneando, setEscaneando] = useState(false);
     const [userId, setUserId] = useState("");
@@ -30,7 +38,7 @@ function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
         onCerrar();
     }
 
-    function alLeerQr(contenido) {
+    async function alLeerQr(contenido) {
         setEscaneando(false);
 
         const contacto = parsearContactoQr(contenido);
@@ -40,11 +48,34 @@ function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
             return;
         }
 
+        if (contacto.userId === userIdLocal) {
+            setAviso("Ese es tu propio QR. Escanea el del otro dispositivo.");
+            return;
+        }
+
+        // Si la clave leída no se puede importar, mejor descartarla y tirar por
+        // la invitación que guardar una clave inservible: con una clave rota el
+        // cifrado falla y los mensajes acabarían saliendo en claro.
+        let clave = contacto.publicKey;
+        let mensaje = null;
+
+        if (clave) {
+            try {
+                await importarClavePublica(clave);
+            } catch (error) {
+                console.error("La clave pública del QR no es válida:", error);
+                clave = "";
+                mensaje =
+                    "El QR se ha leído, pero su clave pública no es válida. " +
+                    "Se enviará una invitación y el cifrado se activará al aceptarla.";
+            }
+        }
+
         setUserId(contacto.userId);
         setNombre(contacto.displayName);
-        setClavePublica(contacto.publicKey);
+        setClavePublica(clave);
         setPestana(PESTANA_MANUAL);
-        setAviso(null);
+        setAviso(mensaje);
     }
 
     async function guardar(evento) {
@@ -53,6 +84,11 @@ function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
         const idLimpio = userId.trim();
         if (!idLimpio) {
             setAviso("Hace falta el identificador del contacto.");
+            return;
+        }
+
+        if (idLimpio === userIdLocal) {
+            setAviso("Ese es tu propio identificador.");
             return;
         }
 
@@ -93,8 +129,8 @@ function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
                     {pestana === PESTANA_QR && (
                         <div className="nuevo-chat-qr">
                             <p>
-                                Escanea el QR del perfil del otro dispositivo. Se rellenarán su
-                                identificador, su nombre y su clave pública.
+                                Escanea el QR del perfil del otro dispositivo. Se rellenará todo
+                                solo, incluida su clave pública.
                             </p>
                             <button
                                 type="button"
@@ -129,21 +165,18 @@ function NuevoChatDialog({ abierto, onCerrar, onGuardar }) {
                                 />
                             </label>
 
-                            <label>
-                                Clave pública
-                                <textarea
-                                    value={clavePublica}
-                                    onChange={(evento) => setClavePublica(evento.target.value)}
-                                    placeholder="Base64 de la clave pública (opcional)"
-                                    rows={3}
-                                />
-                            </label>
-
-                            <p className="nuevo-chat-nota">
-                                Sin clave pública los mensajes viajarían en claro. Si la dejas vacía,
-                                se enviará una invitación y el cifrado se activará cuando el contacto
-                                la acepte.
-                            </p>
+                            {clavePublica ? (
+                                <p className="nuevo-chat-clave-ok">
+                                    <Icono nombre="candado" tamano={14} />
+                                    Clave pública leída del QR. El cifrado estará activo desde el
+                                    primer mensaje.
+                                </p>
+                            ) : (
+                                <p className="nuevo-chat-nota">
+                                    Se le enviará una invitación. En cuanto la acepte, las claves se
+                                    intercambian solas y el cifrado se activa.
+                                </p>
+                            )}
 
                             <button type="submit" className="nuevo-chat-boton-principal">
                                 Guardar contacto

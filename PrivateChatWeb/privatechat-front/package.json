@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node pruebas/ejecutar.mjs"
+    "test": "node pruebas/ejecutar.mjs",
+    "deploy": "powershell -ExecutionPolicy Bypass -File ./desplegar.ps1"
   },
   "dependencies": {
     "jsqr": "^1.4.0",

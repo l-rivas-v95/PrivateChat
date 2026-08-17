@@ -1,10 +1,10 @@
 import {
     ALMACEN_MENSAJES,
+    actualizarEnAlmacen,
     borrarPorClave,
     borrarPorIndice,
     guardar,
     guardarVarios,
-    obtenerPorClave,
     obtenerPorIndice,
     obtenerTodos
 } from "./database";
@@ -31,13 +31,10 @@ export function borrarMensajesDeContacto(contactUsername) {
     return borrarPorIndice(ALMACEN_MENSAJES, "porContacto", contactUsername);
 }
 
-export async function actualizarEstadoEntrega(messageId, estado) {
-    const mensaje = await obtenerPorClave(ALMACEN_MENSAJES, messageId);
-    if (!mensaje) return null;
-
-    const siguiente = { ...mensaje, status: estado };
-    await guardar(ALMACEN_MENSAJES, siguiente);
-    return siguiente;
+export function actualizarEstadoEntrega(messageId, estado) {
+    return actualizarEnAlmacen(ALMACEN_MENSAJES, messageId, (mensaje) =>
+        mensaje ? { ...mensaje, status: estado } : null
+    );
 }
 
 export async function marcarEntrantesComoLeidos(contactUsername) {

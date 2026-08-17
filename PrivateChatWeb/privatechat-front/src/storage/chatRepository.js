@@ -1,5 +1,11 @@
 import { TEXTO_SIN_MENSAJES } from "../config/constantes";
-import { ALMACEN_CHATS, borrarPorClave, guardar, obtenerPorClave, obtenerTodos } from "./database";
+import {
+    ALMACEN_CHATS,
+    actualizarEnAlmacen,
+    borrarPorClave,
+    obtenerPorClave,
+    obtenerTodos
+} from "./database";
 
 export function obtenerChats() {
     return obtenerTodos(ALMACEN_CHATS);
@@ -13,30 +19,26 @@ export function borrarChat(contactUsername) {
     return borrarPorClave(ALMACEN_CHATS, contactUsername);
 }
 
-export async function asegurarChat(contactUsername) {
-    const existente = await buscarChat(contactUsername);
-    if (existente) return existente;
-
+export function asegurarChat(contactUsername) {
     const ahora = Date.now();
-    const chat = {
-        contactUsername,
-        createdAt: ahora,
-        updatedAt: ahora,
-        lastMessagePreview: TEXTO_SIN_MENSAJES
-    };
 
-    await guardar(ALMACEN_CHATS, chat);
-    return chat;
+    return actualizarEnAlmacen(ALMACEN_CHATS, contactUsername, (existente) =>
+        existente || {
+            contactUsername,
+            createdAt: ahora,
+            updatedAt: ahora,
+            lastMessagePreview: TEXTO_SIN_MENSAJES
+        }
+    );
 }
 
-export async function actualizarResumenChat(contactUsername, resumen, actualizadoEn) {
-    const chat = await asegurarChat(contactUsername);
-    const siguiente = {
-        ...chat,
-        lastMessagePreview: resumen,
-        updatedAt: actualizadoEn || Date.now()
-    };
+export function actualizarResumenChat(contactUsername, resumen, actualizadoEn) {
+    const ahora = actualizadoEn || Date.now();
 
-    await guardar(ALMACEN_CHATS, siguiente);
-    return siguiente;
+    return actualizarEnAlmacen(ALMACEN_CHATS, contactUsername, (existente) => ({
+        contactUsername,
+        createdAt: existente?.createdAt || ahora,
+        updatedAt: ahora,
+        lastMessagePreview: resumen
+    }));
 }

@@ -30,12 +30,21 @@ function exigirCrypto() {
     return window.crypto.subtle;
 }
 
-export async function generarParClaves() {
+/**
+ * Genera el par ECDH.
+ *
+ * Con [exportable] a false la clave privada no se puede sacar del navegador:
+ * ni `exportKey` ni ningún otro JavaScript del mismo origen pueden leerla, solo
+ * usarla para derivar. La pública sigue siendo exportable pase lo que pase,
+ * porque así lo define la especificación de WebCrypto para pares de claves, y
+ * la necesitamos en Base64 para el QR y las invitaciones.
+ */
+export async function generarParClaves(exportable = false) {
     const subtle = exigirCrypto();
 
     return subtle.generateKey(
         { name: "ECDH", namedCurve: CURVA },
-        true,
+        exportable,
         ["deriveBits"]
     );
 }
@@ -62,14 +71,14 @@ export async function importarClavePublica(clavePublicaBase64) {
     );
 }
 
-export async function importarClavePrivada(clavePrivadaBase64) {
+export async function importarClavePrivada(clavePrivadaBase64, exportable = false) {
     const subtle = exigirCrypto();
 
     return subtle.importKey(
         "pkcs8",
         base64ABytes(clavePrivadaBase64),
         { name: "ECDH", namedCurve: CURVA },
-        true,
+        exportable,
         ["deriveBits"]
     );
 }

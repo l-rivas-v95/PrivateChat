@@ -1,23 +1,104 @@
 .codigo-qr {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
 
-    padding: 10px;
+    display: block;
+    padding: 0;
 
     background: #ffffff;
-    border-radius: 14px;
+    border-radius: 10px;
 
     box-shadow: var(--sombra);
+
+    overflow: hidden;
+    line-height: 0;
 }
 
+/* Sin ancho fijo: se muestra al tamaño natural que genera la librería, con los
+   módulos exactos. Si no cabe, se reduce, pero solo en ese caso. */
 .codigo-qr img {
     display: block;
-    border-radius: 4px;
+    max-width: 100%;
+    height: auto;
+}
+
+.codigo-qr-vacio {
+    width: 200px;
+    height: 200px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.codigo-qr-pista {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    padding: 3px 8px;
+
+    background: rgba(17, 27, 33, 0.85);
+    border-radius: 10px;
+
+    color: #e9edef;
+    font-size: 11px;
+    line-height: 1.4;
+
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.codigo-qr:hover .codigo-qr-pista {
+    opacity: 1;
 }
 
 .codigo-qr-error {
     margin: 0;
     color: #f2617a;
     font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ ampliado */
+
+.codigo-qr-ampliado {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+
+    padding: 24px;
+
+    background: rgba(11, 20, 26, 0.92);
+
+    cursor: pointer;
+    animation: codigo-qr-aparecer 0.15s ease-out;
+}
+
+.codigo-qr-ampliado img {
+    max-width: min(90vw, 90vh);
+    max-height: min(90vw, 90vh);
+
+    padding: 12px;
+
+    background: #ffffff;
+    border-radius: 14px;
+}
+
+.codigo-qr-ampliado p {
+    margin: 0;
+    color: var(--texto-suave);
+    font-size: 13px;
+    text-align: center;
+}
+
+@keyframes codigo-qr-aparecer {
+    from {
+        opacity: 0;
+    }
 }

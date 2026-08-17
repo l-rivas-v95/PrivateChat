@@ -31,9 +31,17 @@
 }
 
 .lista-chats-app {
+    max-width: 100%;
+    padding: 0;
+
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
     font-size: 16px;
     font-weight: 600;
     line-height: 1.2;
+    text-align: left;
 }
 
 .lista-chats-estado {

@@ -59,6 +59,7 @@ import {
     obtenerNombreLocal,
     obtenerUserIdLocal
 } from "../storage/perfilLocal";
+import { asegurarAlmacenamientoPersistente, consultarEspacioUsado } from "../utils/almacenamiento";
 import { base64ABytes, bytesABase64 } from "../utils/base64";
 import { codificarAvatarABase64 } from "../utils/imageUtils";
 import { useNotificaciones } from "./useNotificaciones";
@@ -83,6 +84,8 @@ export function usePrivateChat() {
     const [mensajes, setMensajes] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [errorCripto, setErrorCripto] = useState(null);
+    const [aviso, setAviso] = useState(null);
+    const [almacenamiento, setAlmacenamiento] = useState({ estado: "comprobando" });
 
     const socketRef = useRef(null);
     const perfilRef = useRef({ nombre: nombreLocal, clavePublica: "", avatar: avatarLocal });
@@ -112,11 +115,26 @@ export function usePrivateChat() {
         return socketRef.current?.enviar(payload) || false;
     }, []);
 
+    /**
+     * Estos dos envíos son los que activan el cifrado, así que cuando fallan no
+     * pueden fallar en silencio: sin ellos el contacto se queda sin tu clave
+     * pública y no hay forma de cifrar nada.
+     */
     const enviarInvitacion = useCallback(
         (destino) => {
             const { nombre, clavePublica } = perfilRef.current;
-            if (!clavePublica) return;
-            enviarPayload(invitacionContacto(userIdLocal, destino, nombre, clavePublica));
+
+            if (!clavePublica) {
+                setAviso("Tus claves aún no están listas. Espera unos segundos y reintenta.");
+                return false;
+            }
+
+            if (!enviarPayload(invitacionContacto(userIdLocal, destino, nombre, clavePublica))) {
+                setAviso("Sin conexión con el servidor: la invitación no se ha enviado.");
+                return false;
+            }
+
+            return true;
         },
         [enviarPayload, userIdLocal]
     );
@@ -124,8 +142,21 @@ export function usePrivateChat() {
     const enviarAceptacion = useCallback(
         (destino) => {
             const { nombre, clavePublica } = perfilRef.current;
-            if (!clavePublica) return;
-            enviarPayload(aceptacionContacto(userIdLocal, destino, nombre, clavePublica));
+
+            if (!clavePublica) {
+                setAviso("Tus claves aún no están listas. Espera unos segundos y reintenta.");
+                return false;
+            }
+
+            if (!enviarPayload(aceptacionContacto(userIdLocal, destino, nombre, clavePublica))) {
+                setAviso(
+                    "Sin conexión con el servidor: el contacto no ha recibido tu clave. " +
+                        "Vuelve a aceptar cuando estés conectado."
+                );
+                return false;
+            }
+
+            return true;
         },
         [enviarPayload, userIdLocal]
     );
@@ -179,12 +210,25 @@ export function usePrivateChat() {
             const displayName = leerValor(payload, "displayName") || NOMBRE_CONTACTO_DESCONOCIDO;
             if (!from || !publicKey) return;
 
+            const previo = await buscarContacto(from);
+            const yaEstabaAceptado = previo?.status === ESTADO_CONTACTO_ACEPTADO;
+
             await guardarContacto(from, displayName, publicKey, ESTADO_CONTACTO_PENDIENTE);
             await asegurarChat(from);
             await recargarEstado();
+
+            // Si ya lo teníamos aceptado y vuelve a invitarnos, es que se ha
+            // quedado sin nuestra clave. Se la devolvemos sola, sin pedirle al
+            // usuario que acepte otra vez algo que ya había aceptado.
+            if (yaEstabaAceptado) {
+                enviarAceptacion(from);
+                enviarAvatarAContacto(from);
+                return;
+            }
+
             notificar("Nueva solicitud de contacto", displayName);
         },
-        [notificar, recargarEstado]
+        [enviarAceptacion, enviarAvatarAContacto, notificar, recargarEstado]
     );
 
     const procesarAceptacion = useCallback(
@@ -364,7 +408,10 @@ export function usePrivateChat() {
             });
 
         recargarEstado()
-            .catch((error) => console.error("No se pudo cargar la base local:", error))
+            .catch((error) => {
+                console.error("No se pudo cargar la base local:", error);
+                if (vivo) setAviso(error.message);
+            })
             .finally(() => {
                 if (vivo) setCargando(false);
             });
@@ -373,6 +420,21 @@ export function usePrivateChat() {
             vivo = false;
         };
     }, [recargarEstado]);
+
+    // Pedir al navegador que no desaloje los datos cuando le falte espacio.
+    useEffect(() => {
+        let vivo = true;
+
+        (async () => {
+            const estado = await asegurarAlmacenamientoPersistente();
+            const espacio = await consultarEspacioUsado();
+            if (vivo) setAlmacenamiento({ estado, ...espacio });
+        })();
+
+        return () => {
+            vivo = false;
+        };
+    }, []);
 
     useEffect(() => {
         const socket = crearChatSocket({
@@ -728,6 +790,9 @@ export function usePrivateChat() {
         conectado,
         cargando,
         errorCripto,
+        aviso,
+        descartarAviso: () => setAviso(null),
+        almacenamiento,
         contactos,
         contactosPendientes,
         resumenChats,

@@ -53,7 +53,14 @@ function ListaChats({
                 />
 
                 <div className="lista-chats-titulo">
-                    <span className="lista-chats-app">PrivateChat</span>
+                    <button
+                        type="button"
+                        className="lista-chats-app"
+                        onClick={onAbrirPerfil}
+                        title="Editar tu perfil"
+                    >
+                        {nombreLocal}
+                    </button>
                     <span className={`lista-chats-estado ${claseEstado}`}>
                         <i className="lista-chats-punto" />
                         {estadoConexion}
@@ -65,6 +72,7 @@ function ListaChats({
                     className="lista-chats-accion"
                     onClick={onNuevoChat}
                     title="Nuevo chat"
+                    aria-label="Nuevo chat"
                 >
                     <Icono nombre="mas" tamano={22} />
                 </button>
