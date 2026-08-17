@@ -1,4 +1,6 @@
+import { useState } from "react";
 import Icono from "../common/Icono";
+import VisorMedia from "./VisorMedia";
 
 /**
  * Los adjuntos se guardan como Blob en IndexedDB. Cada recarga del estado
@@ -27,27 +29,47 @@ export function olvidarAdjunto(messageId) {
 }
 
 function AdjuntoMensaje({ mensaje }) {
+    const [visorAbierto, setVisorAbierto] = useState(false);
+
     const url = urlDeAdjunto(mensaje);
     if (!url) return null;
 
     const mime = mensaje.mimeType || "";
+    const nombre = mensaje.fileName || "archivo";
 
-    if (mime.startsWith("image/")) {
+    if (mime.startsWith("image/") || mime.startsWith("video/")) {
+        const esVideo = mime.startsWith("video/");
+
         return (
-            <a
-                className="adjunto-imagen"
-                href={url}
-                download={mensaje.fileName}
-                target="_blank"
-                rel="noreferrer"
-            >
-                <img src={url} alt={mensaje.fileName || "Imagen"} />
-            </a>
-        );
-    }
+            <>
+                <button
+                    type="button"
+                    className={esVideo ? "adjunto-video" : "adjunto-imagen"}
+                    onClick={() => setVisorAbierto(true)}
+                    title="Pulsa para verlo"
+                >
+                    {esVideo ? (
+                        <>
+                            <video src={url} preload="metadata" muted />
+                            <span className="adjunto-play">
+                                <Icono nombre="enviar" tamano={20} />
+                            </span>
+                        </>
+                    ) : (
+                        <img src={url} alt={nombre} />
+                    )}
+                </button>
 
-    if (mime.startsWith("video/")) {
-        return <video className="adjunto-video" src={url} controls preload="metadata" />;
+                {visorAbierto && (
+                    <VisorMedia
+                        url={url}
+                        nombre={nombre}
+                        mimeType={mime}
+                        onCerrar={() => setVisorAbierto(false)}
+                    />
+                )}
+            </>
+        );
     }
 
     if (mime.startsWith("audio/")) {
@@ -55,9 +77,9 @@ function AdjuntoMensaje({ mensaje }) {
     }
 
     return (
-        <a className="adjunto-fichero" href={url} download={mensaje.fileName}>
+        <a className="adjunto-fichero" href={url} download={nombre}>
             <Icono nombre="documento" tamano={26} />
-            <span className="adjunto-fichero-nombre">{mensaje.fileName || "Archivo"}</span>
+            <span className="adjunto-fichero-nombre">{nombre}</span>
             <Icono nombre="descargar" tamano={18} />
         </a>
     );

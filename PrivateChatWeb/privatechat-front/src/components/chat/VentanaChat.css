@@ -4,6 +4,7 @@
 
     height: 100%;
     min-width: 0;
+    min-height: 0;
 
     background: var(--fondo-conversacion);
 }
@@ -165,7 +166,10 @@
     position: relative;
 
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 
     padding: 18px 6% 12px;
 }
@@ -380,23 +384,46 @@
 
 /* ------------------------------------------------------------------ adjuntos */
 
-.adjunto-imagen {
+.adjunto-imagen,
+.adjunto-video {
+    position: relative;
+
     display: block;
     max-width: 320px;
+    padding: 0;
+
     border-radius: 6px;
     overflow: hidden;
+
+    line-height: 0;
+    cursor: pointer;
 }
 
-.adjunto-imagen img {
+.adjunto-imagen img,
+.adjunto-video video {
     display: block;
     width: 100%;
     height: auto;
 }
 
-.adjunto-video {
-    display: block;
-    max-width: 320px;
-    border-radius: 6px;
+.adjunto-play {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 48px;
+    height: 48px;
+
+    background: rgba(11, 20, 26, 0.65);
+    border-radius: 50%;
+
+    color: #fff;
+
+    transform: translate(-50%, -50%);
 }
 
 .adjunto-audio {
@@ -452,14 +479,163 @@
 }
 
 .redactor {
+    position: relative;
+
     display: flex;
     align-items: flex-end;
     gap: 8px;
 
     flex-shrink: 0;
     padding: 9px 16px;
+    padding-bottom: max(9px, env(safe-area-inset-bottom));
 
     background: var(--fondo-panel-alto);
+}
+
+/* ------------------------------------------------------- menú de adjuntar */
+
+/* Sin `position: relative` a propósito: así el menú se posiciona respecto a
+   `.redactor` y queda entero por encima de la barra, no pegado al botón. */
+.redactor-adjuntar {
+    flex-shrink: 0;
+}
+
+.redactor-menu-fondo {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+}
+
+.redactor-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 12px;
+    z-index: 9;
+
+    display: flex;
+    flex-direction: column;
+
+    min-width: 190px;
+    padding: 6px;
+
+    background: var(--fondo-panel-alto);
+    border-radius: 12px;
+
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+    animation: redactor-menu-subir 0.14s ease-out;
+}
+
+@keyframes redactor-menu-subir {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+.redactor-menu button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    padding: 11px 13px;
+
+    border-radius: 8px;
+
+    color: var(--texto);
+    font-size: 14.5px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.redactor-menu button:hover {
+    background: var(--fondo-hover);
+}
+
+.redactor-menu .icono {
+    color: var(--acento);
+}
+
+.redactor-accion.activa {
+    background: var(--fondo-activo);
+    color: var(--acento);
+}
+
+/* --------------------------------------------------------- nota de voz */
+
+.redactor-grabando {
+    align-items: center;
+}
+
+.redactor-cancelar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    flex-shrink: 0;
+    padding: 9px 15px;
+
+    background: var(--fondo-activo);
+    border-radius: 20px;
+
+    color: #f2617a;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.redactor-cancelar:hover {
+    background: rgba(242, 97, 122, 0.18);
+}
+
+.redactor-grabacion {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+
+    flex: 1;
+    min-width: 0;
+
+    padding: 0 4px;
+}
+
+.redactor-punto {
+    width: 10px;
+    height: 10px;
+
+    background: #f2617a;
+    border-radius: 50%;
+
+    animation: redactor-latido 1.1s ease-in-out infinite;
+}
+
+@keyframes redactor-latido {
+    50% {
+        opacity: 0.25;
+    }
+}
+
+.redactor-tiempo {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+}
+
+.redactor-error {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: calc(100% + 6px);
+
+    margin: 0;
+    padding: 9px 12px;
+
+    background: #f2617a;
+    border-radius: 9px;
+
+    color: #fff;
+    font-size: 12.5px;
+
+    cursor: pointer;
 }
 
 .redactor-accion,

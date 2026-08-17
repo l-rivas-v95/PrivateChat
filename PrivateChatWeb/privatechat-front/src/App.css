@@ -10,14 +10,30 @@
     overflow: hidden;
 }
 
+/**
+ * `min-height: 0` en los dos paneles no es adorno.
+ *
+ * El tamaño mínimo automático de un elemento de rejilla es su contenido, así
+ * que sin esto el panel crece hasta abarcar toda la conversación, el `height:
+ * 100%` de dentro se calcula sobre esa altura crecida y el `overflow-y: auto`
+ * de la lista de mensajes no llega a activarse nunca: no aparece barra y la
+ * conversación no baja.
+ */
 .app-panel-izquierdo {
     position: relative;
+
     min-width: 0;
+    min-height: 0;
+
     overflow: hidden;
 }
 
 .app-panel-derecho {
     min-width: 0;
+    min-height: 0;
+
+    overflow: hidden;
+
     border-left: 1px solid var(--borde);
 }
 
